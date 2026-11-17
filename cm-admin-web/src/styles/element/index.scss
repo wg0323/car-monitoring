@@ -1,0 +1,25 @@
+// P4 改为按需导入组件时使用：Vite scss.additionalData 注入本文件即可让 Sass 变量覆盖生效。
+// P1 采用全量 CSS + CSS Vars 覆盖（见 styles/tokens.scss），本文件不参与全量构建。
+@forward 'element-plus/theme-chalk/src/common/var.scss' with (
+  $colors: (
+    'primary': ('base': #1e40af),
+    'success': ('base': #16a34a),
+    'warning': ('base': #d97706),
+    'danger': ('base': #dc2626),
+    'info': ('base': #64748b),
+  ),
+  $font-size: (
+    'extra-large': 18px,
+    'large': 16px,
+    'medium': 14px,
+    'base': 14px,
+    'small': 13px,
+    'extra-small': 12px,
+  ),
+  $border-radius: (
+    'base': 2px,
+    'small': 2px,
+    'round': 4px,
+    'circle': 50%,
+  )
+);

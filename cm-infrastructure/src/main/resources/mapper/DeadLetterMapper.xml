@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmMqDeadLetterMapper">
+
+    <!-- 条件更新：只有 PENDING 的死信能被重放一次，并发与重复调用都会落空。 -->
+    <update id="markReplayed">
+        UPDATE cm_mq_dead_letter
+        SET dead_status = 'REPLAYED',
+            replay_count = replay_count + 1,
+            replayed_at = #{replayedAt},
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND dead_status = 'PENDING'
+          AND is_deleted = 0
+    </update>
+</mapper>

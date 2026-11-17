@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmWarnMsgUrgeTodoReqMapper">
+
+    <resultMap id="urgeTodoMap" type="com.cm.infrastructure.persistence.entity.CmWarnMsgUrgeTodoReq">
+        <id column="id" property="id"/>
+        <result column="platform_id" property="platformId"/>
+        <result column="supervise_id" property="superviseId"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="warn_src" property="warnSrc"/>
+        <result column="warn_type" property="warnType"/>
+        <result column="warn_time" property="warnTime"/>
+        <result column="supervision_end_time" property="supervisionEndTime"/>
+        <result column="supervision_level" property="supervisionLevel"/>
+        <result column="supervisor" property="supervisor"/>
+        <result column="supervisor_tel" property="supervisorTel"/>
+        <result column="supervisor_email" property="supervisorEmail"/>
+        <result column="vehicle_id" property="vehicleId"/>
+        <result column="ack_result" property="ackResult"/>
+        <result column="ack_time" property="ackTime"/>
+        <result column="company_id" property="companyId"/>
+        <result column="is_deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!-- 分页与增量共用同一套筛选；acknowledged 为 null 时不区分是否已应答。 -->
+    <sql id="urgeTodoFilter">
+        <if test="plateNo != null and plateNo != ''">
+            AND plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <if test="acknowledged != null and acknowledged">
+            AND ack_time IS NOT NULL
+        </if>
+        <if test="acknowledged != null and !acknowledged">
+            AND ack_time IS NULL
+        </if>
+        <if test="startTime != null">
+            AND create_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND create_time &lt;= #{endTime}
+        </if>
+    </sql>
+
+    <select id="selectUrgeTodoPage" resultMap="urgeTodoMap">
+        SELECT id,
+               platform_id,
+               supervise_id,
+               plate_no,
+               plate_color,
+               warn_src,
+               warn_type,
+               warn_time,
+               supervision_end_time,
+               supervision_level,
+               supervisor,
+               supervisor_tel,
+               supervisor_email,
+               vehicle_id,
+               ack_result,
+               ack_time,
+               company_id,
+               is_deleted,
+               create_time,
+               update_time
+        FROM cm_warn_msg_urge_todo_req
+        WHERE is_deleted = 0
+        <include refid="urgeTodoFilter"/>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countUrgeTodoPage" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_warn_msg_urge_todo_req
+        WHERE is_deleted = 0
+        <include refid="urgeTodoFilter"/>
+    </select>
+
+    <!-- 增量督办：自动弹窗用，只取未应答的记录。 -->
+    <select id="selectNewUrgeTodos" resultMap="urgeTodoMap">
+        SELECT id,
+               platform_id,
+               supervise_id,
+               plate_no,
+               plate_color,
+               warn_src,
+               warn_type,
+               warn_time,
+               supervision_end_time,
+               supervision_level,
+               supervisor,
+               supervisor_tel,
+               supervisor_email,
+               vehicle_id,
+               ack_result,
+               ack_time,
+               company_id,
+               is_deleted,
+               create_time,
+               update_time
+        FROM cm_warn_msg_urge_todo_req
+        WHERE is_deleted = 0
+          AND ack_time IS NULL
+          AND id &gt; #{sinceId}
+        <if test="startTime != null">
+            AND create_time &gt;= #{startTime}
+        </if>
+        ORDER BY id
+        LIMIT #{limit}
+    </select>
+</mapper>

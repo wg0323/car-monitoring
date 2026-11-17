@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmAlarmRecordMapper">
+
+    <!-- 旧 alarm.selectAlarms 用 alarmrecord UNION ALL hisalarmrecord；新库合并为单表，用 alarm_channel 区分来源。 -->
+    <resultMap id="alarmRowMap" type="com.cm.infrastructure.persistence.row.AlarmRow">
+        <result column="id" property="id"/>
+        <result column="event_key" property="eventKey"/>
+        <result column="alarm_channel" property="alarmChannel"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="sim_no" property="simNo"/>
+        <result column="vehicle_id" property="vehicleId"/>
+        <result column="alarm_type" property="alarmType"/>
+        <result column="alarm_source" property="alarmSource"/>
+        <result column="description" property="description"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="location" property="location"/>
+        <result column="latitude" property="latitude"/>
+        <result column="longitude" property="longitude"/>
+        <result column="processed" property="processed"/>
+        <result column="processed_time" property="processedTime"/>
+        <result column="processed_user_name" property="processedUserName"/>
+        <result column="remark" property="remark"/>
+        <result column="velocity" property="velocity"/>
+        <result column="time_span" property="timeSpan"/>
+    </resultMap>
+
+    <!-- 数据范围片段单独抽出：增量查询只带 scope 与时间窗，不带类型 / 处理状态条件。 -->
+    <sql id="scopeFilter">
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND a.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+    </sql>
+
+    <sql id="alarmFilter">
+        <include refid="scopeFilter"/>
+        <if test="alarmType != null and alarmType != ''">
+            AND a.alarm_type = #{alarmType}
+        </if>
+        <if test="processed != null">
+            AND a.is_processed = #{processed}
+        </if>
+        <if test="plateNo != null and plateNo != ''">
+            AND a.plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <if test="startTime != null">
+            AND a.start_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND a.start_time &lt;= #{endTime}
+        </if>
+    </sql>
+
+    <select id="selectAlarmPage" resultMap="alarmRowMap">
+        SELECT a.id,
+               a.event_key,
+               a.alarm_channel,
+               a.plate_no,
+               v.plate_color,
+               a.sim_no,
+               a.vehicle_id,
+               a.alarm_type,
+               a.alarm_source,
+               a.description,
+               a.start_time,
+               a.end_time,
+               a.location,
+               a.latitude,
+               a.longitude,
+               a.velocity,
+               a.time_span,
+               a.is_processed AS processed,
+               a.processed_time,
+               a.processed_user_name,
+               a.remark
+        FROM cm_alarm_record a
+        LEFT JOIN cm_vehicle v ON v.plate_no = a.plate_no AND v.is_deleted = 0
+        WHERE a.is_deleted = 0
+        <include refid="alarmFilter"/>
+        ORDER BY a.start_time DESC, a.event_key
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countAlarmPage" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_alarm_record a
+        WHERE a.is_deleted = 0
+        <include refid="alarmFilter"/>
+    </select>
+
+    <!-- 增量报警：弹窗轮询用。按主键升序，前端拿最后一条 id 作为下次的 sinceId。
+         颜色不在报警表，按车牌回查车辆表；无匹配车辆时颜色为 null。 -->
+    <select id="selectNewAlarms" resultMap="alarmRowMap">
+        SELECT a.id,
+               a.plate_no,
+               v.plate_color,
+               a.sim_no,
+               a.vehicle_id,
+               a.alarm_type,
+               a.alarm_source,
+               a.start_time,
+               a.location,
+               a.latitude,
+               a.longitude,
+               a.velocity,
+               a.is_processed AS processed,
+               a.processed_time
+        FROM cm_alarm_record a
+        LEFT JOIN cm_vehicle v ON v.plate_no = a.plate_no AND v.is_deleted = 0
+        WHERE a.is_deleted = 0
+          AND a.id &gt; #{sinceId}
+        <include refid="scopeFilter"/>
+        <if test="startTime != null">
+            AND a.start_time &gt;= #{startTime}
+        </if>
+        ORDER BY a.id
+        LIMIT #{limit}
+    </select>
+
+    <!-- 条件更新：影响行数为 0 时由 Service 抛业务异常，禁止返回 success:true 的假成功。 -->
+    <update id="markProcessed">
+        UPDATE cm_alarm_record
+        SET is_processed = 1,
+            processed_time = #{processTime},
+            processed_user_id = #{processorId},
+            processed_user_name = #{processorName},
+            remark = #{remark},
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{alarmId}
+          AND is_processed = 0
+          AND is_deleted = 0
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+    </update>
+
+    <!-- 报警报表行：补车牌颜色、车组、车速与时长，口径对齐旧 alarm.selectAlarms。 -->
+    <resultMap id="reportAlarmRowMap" type="com.cm.infrastructure.persistence.row.AlarmRow">
+        <result column="event_key" property="eventKey"/>
+        <result column="alarm_channel" property="alarmChannel"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="vehicle_id" property="vehicleId"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="alarm_type" property="alarmType"/>
+        <result column="alarm_source" property="alarmSource"/>
+        <result column="description" property="description"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="location" property="location"/>
+        <result column="velocity" property="velocity"/>
+        <result column="time_span" property="timeSpan"/>
+        <result column="processed" property="processed"/>
+        <result column="processed_time" property="processedTime"/>
+    </resultMap>
+
+    <!-- 报表筛选：与报警处理页的 alarmFilter 独立，避免改一处波及两个页面。 -->
+    <sql id="reportAlarmFilter">
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND a.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        <if test="alarmChannel != null and alarmChannel != ''">
+            AND a.alarm_channel = #{alarmChannel}
+        </if>
+        <if test="alarmType != null and alarmType != ''">
+            AND a.alarm_type = #{alarmType}
+        </if>
+        <if test="alarmSource != null and alarmSource != ''">
+            AND a.alarm_source = #{alarmSource}
+        </if>
+        <if test="plateNo != null and plateNo != ''">
+            AND a.plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <if test="departmentId != null">
+            AND a.department_id = #{departmentId}
+        </if>
+        <if test="startTime != null">
+            AND a.start_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND a.start_time &lt;= #{endTime}
+        </if>
+    </sql>
+
+    <select id="selectAlarmReportPage" resultMap="reportAlarmRowMap">
+        SELECT a.event_key,
+               a.alarm_channel,
+               a.plate_no,
+               a.vehicle_id,
+               a.alarm_type,
+               a.alarm_source,
+               a.description,
+               a.start_time,
+               a.end_time,
+               a.location,
+               a.velocity,
+               a.time_span,
+               a.is_processed AS processed,
+               a.processed_time,
+               v.plate_color,
+               d.name AS department_name
+        FROM cm_alarm_record a
+        LEFT JOIN cm_vehicle v ON v.plate_no = a.plate_no AND v.is_deleted = 0
+        LEFT JOIN cm_department d ON d.id = a.department_id AND d.is_deleted = 0
+        WHERE a.is_deleted = 0
+        <include refid="reportAlarmFilter"/>
+        ORDER BY a.start_time DESC, a.event_key
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countAlarmReport" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_alarm_record a
+        WHERE a.is_deleted = 0
+        <include refid="reportAlarmFilter"/>
+    </select>
+
+    <!-- 导出与页面共用同一份筛选条件，只去掉分页并加上行数上限，避免导出与页面口径漂移。 -->
+    <select id="selectAlarmRows" resultMap="reportAlarmRowMap">
+        SELECT a.event_key,
+               a.alarm_channel,
+               a.plate_no,
+               a.vehicle_id,
+               a.alarm_type,
+               a.alarm_source,
+               a.description,
+               a.start_time,
+               a.end_time,
+               a.location,
+               a.velocity,
+               a.time_span,
+               a.is_processed AS processed,
+               a.processed_time,
+               v.plate_color,
+               d.name AS department_name
+        FROM cm_alarm_record a
+        LEFT JOIN cm_vehicle v ON v.plate_no = a.plate_no AND v.is_deleted = 0
+        LEFT JOIN cm_department d ON d.id = a.department_id AND d.is_deleted = 0
+        WHERE a.is_deleted = 0
+        <include refid="reportAlarmFilter"/>
+        ORDER BY a.start_time DESC, a.event_key
+        LIMIT #{maxRows}
+    </select>
+
+    <!-- 终端报警位的开户 / 关户。按 sim_no + alarm_type + 通道定位未结束记录，不依赖内存里的报警 map。 -->
+    <select id="selectOpenAlarmTypes" resultType="java.lang.String">
+        SELECT alarm_type
+        FROM cm_alarm_record
+        WHERE sim_no = #{simNo}
+          AND alarm_channel = #{alarmChannel}
+          AND end_time IS NULL
+          AND is_deleted = 0
+    </select>
+
+    <!--
+      结束时间与持续时长都由事件时间算，不用数据库当前时间，避免回放时口径漂移。
+      额外加 start_time <= endTime：旧报文（死信重放、迟到的旧帧）不能用早于开始时间的时刻关户，
+      否则 time_span 会变成负数；这类帧影响行数为 0，未结束记录留给后续真实帧去关。
+    -->
+    <update id="closeOpenAlarm">
+        UPDATE cm_alarm_record
+        SET end_time = #{endTime},
+            alarm_status = 'Old',
+            latitude1 = #{latitude},
+            longitude1 = #{longitude},
+            mileage2 = #{mileage},
+            gas2 = #{gas},
+            time_span = ROUND(TIMESTAMPDIFF(SECOND, start_time, #{endTime}) / 60, 2),
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE sim_no = #{simNo}
+          AND alarm_type = #{alarmType}
+          AND alarm_channel = #{alarmChannel}
+          AND end_time IS NULL
+          AND start_time &lt;= #{endTime}
+          AND is_deleted = 0
+    </update>
+</mapper>

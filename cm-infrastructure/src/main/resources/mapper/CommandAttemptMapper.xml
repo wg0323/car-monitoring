@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmCommandAttemptMapper">
+
+    <resultMap id="attemptMap" type="com.cm.infrastructure.persistence.entity.CmCommandAttempt">
+        <id column="id" property="id"/>
+        <result column="command_id" property="commandId"/>
+        <result column="attempt_no" property="attemptNo"/>
+        <result column="sim_no" property="simNo"/>
+        <result column="terminal_serial_no" property="terminalSerialNo"/>
+        <result column="connection_incarnation" property="connectionIncarnation"/>
+        <result column="gateway_id" property="gatewayId"/>
+        <result column="downlink_message_id" property="downlinkMessageId"/>
+        <result column="expected_ack_message_id" property="expectedAckMessageId"/>
+        <result column="write_status" property="writeStatus"/>
+        <result column="write_at" property="writeAt"/>
+        <result column="error_reason" property="errorReason"/>
+        <result column="is_deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="attemptColumns">
+        id, command_id, attempt_no, sim_no, terminal_serial_no, connection_incarnation, gateway_id,
+        downlink_message_id, expected_ack_message_id, write_status, write_at, error_reason,
+        is_deleted, create_time, update_time
+    </sql>
+
+    <select id="selectNextAttemptNo" resultType="int">
+        SELECT COALESCE(MAX(attempt_no), 0) + 1
+        FROM cm_command_attempt
+        WHERE command_id = #{commandId}
+    </select>
+
+    <!-- ACK 只认四元组精确匹配，取不到就是取不到，不做邻近匹配。 -->
+    <select id="selectByRoute" resultMap="attemptMap">
+        SELECT
+        <include refid="attemptColumns"/>
+        FROM cm_command_attempt
+        WHERE gateway_id = #{gatewayId}
+          AND sim_no = #{simNo}
+          AND terminal_serial_no = #{terminalSerialNo}
+          AND connection_incarnation = #{connectionIncarnation}
+          AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <update id="markWritten">
+        UPDATE cm_command_attempt
+        SET write_status = 'WRITTEN',
+            write_at = #{writeAt},
+            error_reason = '',
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND write_status = 'PERSISTED'
+    </update>
+
+    <update id="updateWriteStatus">
+        UPDATE cm_command_attempt
+        SET write_status = #{writeStatus},
+            error_reason = #{errorReason},
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND write_status = 'PERSISTED'
+    </update>
+</mapper>

@@ -1,0 +1,18 @@
+logging:
+  level:
+    root: WARN
+    com.cm: INFO
+knife4j:
+  production: true
+springdoc:
+  api-docs:
+    enabled: false
+management:
+  endpoint:
+    health:
+      show-details: never
+cm:
+  command:
+    mq:
+      # 生产用 quorum queue：classic 不复制消息内容，单节点故障即丢消息（方案 11.3）。
+      queue-type: quorum

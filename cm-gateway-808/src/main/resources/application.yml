@@ -1,0 +1,163 @@
+spring:
+  application:
+    name: cm-gateway-808
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: ${CM_DB_URL:jdbc:mysql://127.0.0.1:3306/car_monitoring?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${CM_DB_USERNAME:cm_app}
+    password: ${CM_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${CM_REDIS_HOST:127.0.0.1}
+      port: ${CM_REDIS_PORT:6379}
+      database: ${CM_REDIS_DATABASE:0}
+      password: ${CM_REDIS_PASSWORD:}
+  # Boot 4 的 MongoDB 属性前缀是 spring.mongodb，不再挂在 spring.data 下。
+  mongodb:
+    # 轨迹与隔离集合都落在专用库；网关既发布也消费，必须能直连。
+    uri: ${CM_MONGO_URI:mongodb://127.0.0.1:27017/car_monitoring_telemetry}
+  rabbitmq:
+    host: ${CM_MQ_HOST:127.0.0.1}
+    port: ${CM_MQ_PORT:5672}
+    username: ${CM_MQ_USERNAME:cm_app}
+    password: ${CM_MQ_PASSWORD:}
+    virtual-host: ${CM_MQ_VHOST:cm}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 10s
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  # 默认调度线程只有 1 个：里程落库、指令超时清扫、在线对账会互相饿死，至少给 2 个。
+  task:
+    scheduling:
+      pool:
+        size: 2
+
+server:
+  port: ${CM_GATEWAY_808_HTTP_PORT:18081}
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+cm:
+  id:
+    # 网关会写 cm_command_attempt，必须与管理端使用不同的 worker-id。
+    worker-id: ${CM_ID_WORKER_ID:1}
+    datacenter-id: ${CM_ID_DATACENTER_ID:0}
+  gateway:
+    tcp-port: ${CM_GATEWAY_808_TCP_PORT:18088}
+    # 终端鉴权码：0x8100 下发、0x0102 回传校验。默认值与旧系统黄金报文本一致，
+    # 生产改用 CM_GATEWAY_AUTH_CODE 注入（application-prod.yml 不给默认值）。
+    auth-code: ${CM_GATEWAY_AUTH_CODE:1234567890A}
+  command:
+    gateway-id: ${CM_GATEWAY_ID:gw-1}
+    route-ttl-seconds: 300
+    ack-timeout-seconds: 60
+    relay:
+      enabled: false
+    mq:
+      exchange: cm.command
+      dead-letter-exchange: cm.command.dlx
+      downlink-enabled: true
+      downlink-queue: command.downlink.${CM_GATEWAY_ID:gw-1}
+      downlink-routing-key: command.downlink.${CM_GATEWAY_ID:gw-1}
+      ack-queue: command.ack
+      downlink-dead-queue: command.downlink.dlq
+      ack-dead-queue: command.ack.dlq
+      queue-type: ${CM_COMMAND_QUEUE_TYPE:classic}
+  telemetry:
+    # 漂移阈值必须小于未来容忍阈值，否则超前方向没有 CLOCK_DRIFT 区间。
+    time:
+      future-tolerance-seconds: 300
+      stale-threshold-seconds: 86400
+      drift-tolerance-seconds: 60
+      zone: Asia/Shanghai
+    dedup:
+      ttl-seconds: 604800
+    latest:
+      ttl-seconds: 604800
+    publish:
+      confirm-timeout-millis: 3000
+    mongo:
+      history-collection: position_history
+      quarantine-collection: position_quarantine
+      retention-days: 90
+      quarantine-retention-days: 7
+      auto-init: true
+    online:
+      lease-ttl-seconds: 180
+      reconcile-enabled: true
+      reconcile-interval-millis: 60000
+      reconcile-initial-delay-millis: 10000
+    # 里程累计在 Redis，落库由网关内定时任务完成；管理端不开 flush，避免两个进程同时写。
+    mileage:
+      max-delta-kilometers: 100
+      retention-days: 7
+      flush-enabled: true
+      flush-interval-millis: 60000
+      flush-initial-delay-millis: 30000
+    mq:
+      exchange: cm.telemetry
+      dead-letter-exchange: cm.telemetry.dlx
+      history-queue-prefix: telemetry.history
+      latest-queue-prefix: telemetry.latest
+      alarm-queue-prefix: telemetry.alarm
+      routing-key-prefix: telemetry.position
+      dead-queue: telemetry.dead
+      shard-count: ${CM_TELEMETRY_SHARD_COUNT:8}
+      prefetch-count: 50
+      consumers-enabled: true
+      queue-type: ${CM_TELEMETRY_QUEUE_TYPE:classic}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: cm-gateway-808
+    stage: P3
+    description: JT808 TCP 监听、指令下行写入与终端应答转发
+
+logging:
+  level:
+    root: INFO
+    com.cm: INFO

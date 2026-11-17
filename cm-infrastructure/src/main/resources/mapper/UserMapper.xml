@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmUserMapper">
+
+    <resultMap id="userRowMap" type="com.cm.infrastructure.persistence.row.UserRow">
+        <result column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="display_name" property="displayName"/>
+        <result column="user_type" property="userType"/>
+        <result column="phone_no" property="phoneNo"/>
+        <result column="is_enabled" property="enabled"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <resultMap id="userRoleRowMap" type="com.cm.infrastructure.persistence.row.UserRoleRow">
+        <result column="id" property="roleId"/>
+        <result column="role_code" property="roleCode"/>
+        <result column="name" property="roleName"/>
+    </resultMap>
+
+    <resultMap id="userDepartmentRowMap" type="com.cm.infrastructure.persistence.row.DepartmentRow">
+        <result column="id" property="id"/>
+        <result column="parent_id" property="parentId"/>
+        <result column="name" property="name"/>
+        <result column="company_id" property="companyId"/>
+    </resultMap>
+
+    <!--
+        用户的数据范围：被查看用户的可访问部门与当前账号 DataScope.departmentIds 有交集。
+        cm_user 没有 department_id 列，归属只在 cm_user_department，因此不能沿用车辆那种单列等值过滤。
+        这里用 EXISTS 而不是 join：一行用户可能命中多个部门，join 会把 total 乘出来。
+        scope 缺失时 fail-closed，绝不退化成全量。
+    -->
+    <sql id="userScopeFilter">
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND EXISTS (
+                    SELECT 1
+                    FROM cm_user_department ud
+                    WHERE ud.user_id = u.id
+                      AND ud.is_deleted = 0
+                      AND ud.department_id IN
+                    <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                        #{deptId}
+                    </foreach>
+                )
+            </when>
+        </choose>
+    </sql>
+
+    <!-- 关键字只做前缀匹配：沿用列表类查询不得左模糊的口径。 -->
+    <sql id="userKeywordFilter">
+        <if test="keyword != null and keyword != ''">
+            AND (u.username LIKE CONCAT(#{keyword}, '%') OR u.display_name LIKE CONCAT(#{keyword}, '%'))
+        </if>
+    </sql>
+
+    <!-- 部门筛选：值已在服务端校验落在数据范围内，这里只按关联表做等值过滤。 -->
+    <sql id="userDepartmentFilter">
+        <if test="departmentId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM cm_user_department ud2
+                WHERE ud2.user_id = u.id
+                  AND ud2.is_deleted = 0
+                  AND ud2.department_id = #{departmentId}
+            )
+        </if>
+    </sql>
+
+    <select id="selectUserPage" resultMap="userRowMap">
+        SELECT u.id,
+               u.username,
+               u.display_name,
+               u.user_type,
+               u.phone_no,
+               CASE WHEN u.user_state = 'disabled' THEN 0 ELSE 1 END AS is_enabled,
+               u.create_time
+        FROM cm_user u
+        WHERE u.is_deleted = 0
+        <include refid="userKeywordFilter"/>
+        <include refid="userDepartmentFilter"/>
+        <include refid="userScopeFilter"/>
+        ORDER BY u.id
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <!-- 列表与详情共用同一份范围片段，避免详情漏掉过滤变成越权入口。 -->
+    <select id="countUserPage" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_user u
+        WHERE u.is_deleted = 0
+        <include refid="userKeywordFilter"/>
+        <include refid="userDepartmentFilter"/>
+        <include refid="userScopeFilter"/>
+    </select>
+
+    <select id="selectUserInScope" resultMap="userRowMap">
+        SELECT u.id,
+               u.username,
+               u.display_name,
+               u.user_type,
+               u.phone_no,
+               CASE WHEN u.user_state = 'disabled' THEN 0 ELSE 1 END AS is_enabled,
+               u.create_time
+        FROM cm_user u
+        WHERE u.is_deleted = 0
+          AND u.id = #{userId}
+        <include refid="userScopeFilter"/>
+    </select>
+
+    <select id="selectUserRoles" resultMap="userRoleRowMap">
+        SELECT r.id, r.role_code, r.name
+        FROM cm_user_role ur
+        INNER JOIN cm_role r ON r.id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND ur.is_deleted = 0
+          AND r.is_deleted = 0
+        ORDER BY r.id
+    </select>
+
+    <!-- 可访问部门同样受查看者的数据范围约束：否则点开一个跨部门用户时，抽屉会把查看者范围外的部门名泄出去。 -->
+    <select id="selectUserDepartments" resultMap="userDepartmentRowMap">
+        SELECT d.id, d.parent_id, d.name, d.company_id
+        FROM cm_user_department ud
+        INNER JOIN cm_department d ON d.id = ud.department_id
+        WHERE ud.user_id = #{userId}
+          AND ud.is_deleted = 0
+          AND d.is_deleted = 0
+        <if test="scope != null and !scope.superAdmin">
+            AND d.id IN
+            <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                #{deptId}
+            </foreach>
+        </if>
+        ORDER BY d.name
+    </select>
+</mapper>

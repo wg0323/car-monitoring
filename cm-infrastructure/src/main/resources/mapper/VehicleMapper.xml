@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmVehicleMapper">
+
+    <!-- 车辆列表与车辆树共用的显式结果映射，不返回 HashMap。 -->
+    <resultMap id="vehicleRowMap" type="com.cm.infrastructure.persistence.row.VehicleRow">
+        <result column="id" property="id"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="sim_no" property="simNo"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="vehicle_type" property="vehicleType"/>
+        <result column="terminal_no" property="terminalNo"/>
+        <result column="driver" property="driver"/>
+        <result column="run_status" property="runStatus"/>
+        <result column="company_id" property="companyId"/>
+        <result column="department_id" property="departmentId"/>
+    </resultMap>
+
+    <!-- 数据范围由服务端注入；scope 缺失时 fail-closed，绝不能退化成全量查询。 -->
+    <sql id="scopeFilter">
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND v.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+    </sql>
+
+    <!-- 车牌与 SIM 改为前缀匹配：旧 SQL 的 '%${value}%' 既不能走索引又有注入风险。 -->
+    <sql id="keywordFilter">
+        <if test="plateNo != null and plateNo != ''">
+            AND v.plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <if test="simNo != null and simNo != ''">
+            AND v.sim_no LIKE CONCAT(#{simNo}, '%')
+        </if>
+    </sql>
+
+    <!-- 部门筛选：值已在服务端校验落在数据范围内，这里只做等值过滤。 -->
+    <sql id="departmentFilter">
+        <if test="departmentId != null">
+            AND v.department_id = #{departmentId}
+        </if>
+    </sql>
+
+    <!--
+        在线/离线筛选：onlineSimNos 是「Redis 在线租约交集数据范围」后的 SIM 清单，
+        调用方已按 1000 条上限校验。在线清单为空时：查在线直接恒假，查离线不加条件。
+    -->
+    <sql id="onlineFilter">
+        <if test="online != null">
+            <choose>
+                <when test="online and (onlineSimNos == null or onlineSimNos.isEmpty())">
+                    AND 1 = 0
+                </when>
+                <when test="online">
+                    AND v.sim_no IN
+                    <foreach collection="onlineSimNos" item="onlineSimNo" open="(" separator="," close=")">
+                        #{onlineSimNo}
+                    </foreach>
+                </when>
+                <when test="onlineSimNos != null and !onlineSimNos.isEmpty()">
+                    AND v.sim_no NOT IN
+                    <foreach collection="onlineSimNos" item="onlineSimNo" open="(" separator="," close=")">
+                        #{onlineSimNo}
+                    </foreach>
+                </when>
+            </choose>
+        </if>
+    </sql>
+
+    <select id="selectVehiclePage" resultMap="vehicleRowMap">
+        SELECT v.id,
+               v.plate_no,
+               v.sim_no,
+               d.name AS department_name,
+               v.vehicle_type,
+               t.term_no AS terminal_no,
+               v.driver,
+               v.run_status,
+               v.company_id,
+               v.department_id
+        FROM cm_vehicle v
+        INNER JOIN cm_department d ON d.id = v.department_id
+        LEFT JOIN cm_terminal t ON t.id = v.terminal_id
+        WHERE v.is_deleted = 0
+          AND d.is_deleted = 0
+        <include refid="keywordFilter"/>
+        <include refid="departmentFilter"/>
+        <include refid="onlineFilter"/>
+        <include refid="scopeFilter"/>
+        ORDER BY v.plate_no
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <!-- 列表与导出共用同一份计数口径，避免只导出列头且静默成功。 -->
+    <select id="countVehiclePage" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_vehicle v
+        INNER JOIN cm_department d ON d.id = v.department_id
+        WHERE v.is_deleted = 0
+          AND d.is_deleted = 0
+        <include refid="keywordFilter"/>
+        <include refid="departmentFilter"/>
+        <include refid="onlineFilter"/>
+        <include refid="scopeFilter"/>
+    </select>
+
+    <!-- 车辆详情：字段口径对齐旧 viewVehicle.jsp，旧 driverInfo 明细未迁移。 -->
+    <resultMap id="vehicleDetailRowMap" type="com.cm.infrastructure.persistence.row.VehicleDetailRow">
+        <result column="id" property="id"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="department_id" property="departmentId"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="member_no" property="memberNo"/>
+        <result column="terminal_no" property="terminalNo"/>
+        <result column="sim_no" property="simNo"/>
+        <result column="vehicle_type" property="vehicleType"/>
+        <result column="use_type" property="useType"/>
+        <result column="industry" property="industry"/>
+        <result column="region" property="region"/>
+        <result column="run_status" property="runStatus"/>
+        <result column="vehicle_status" property="vehicleStatus"/>
+        <result column="driver" property="driver"/>
+        <result column="driver_mobile" property="driverMobile"/>
+        <result column="monitor" property="monitor"/>
+        <result column="monitor_mobile" property="monitorMobile"/>
+        <result column="motor_id" property="motorId"/>
+        <result column="engine_no" property="engineNo"/>
+        <result column="frame_no" property="frameNo"/>
+        <result column="manufacture" property="manufacture"/>
+        <result column="model_no" property="modelNo"/>
+        <result column="vendor" property="vendor"/>
+        <result column="gps_terminal_type" property="gpsTerminalType"/>
+        <result column="oper_permit" property="operPermit"/>
+        <result column="routes" property="routes"/>
+        <result column="buy_time" property="buyTime"/>
+        <result column="install_date" property="installDate"/>
+        <result column="last_check_time" property="lastCheckTime"/>
+        <result column="online_time" property="onlineTime"/>
+        <result column="offline_time" property="offlineTime"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+        <result column="work_hour" property="workHour"/>
+        <result column="remark" property="remark"/>
+    </resultMap>
+
+    <select id="selectVehicleDetail" resultMap="vehicleDetailRowMap">
+        SELECT v.id,
+               v.plate_no,
+               v.plate_color,
+               v.department_id,
+               d.name AS department_name,
+               d.member_no,
+               t.term_no AS terminal_no,
+               v.sim_no,
+               v.vehicle_type,
+               v.use_type,
+               v.industry,
+               v.region,
+               v.run_status,
+               v.vehicle_status,
+               v.driver,
+               v.driver_mobile,
+               v.monitor,
+               v.monitor_mobile,
+               v.motor_id,
+               v.engine_no,
+               v.frame_no,
+               v.manufacture,
+               v.model_no,
+               v.vendor,
+               v.gps_terminal_type,
+               v.oper_permit,
+               v.routes,
+               v.buy_time,
+               v.install_date,
+               v.last_check_time,
+               v.online_time,
+               v.offline_time,
+               v.start_date,
+               v.end_date,
+               v.work_hour,
+               v.remark
+        FROM cm_vehicle v
+        INNER JOIN cm_department d ON d.id = v.department_id
+        LEFT JOIN cm_terminal t ON t.id = v.terminal_id
+        WHERE v.is_deleted = 0
+          AND d.is_deleted = 0
+          AND v.id = #{id}
+        <include refid="scopeFilter"/>
+    </select>
+
+    <select id="selectVehicleTree" resultMap="vehicleRowMap">
+        SELECT v.id,
+               v.plate_no,
+               v.sim_no,
+               d.name AS department_name,
+               v.department_id,
+               v.company_id
+        FROM cm_vehicle v
+        INNER JOIN cm_department d ON d.id = v.department_id
+        WHERE v.is_deleted = 0
+          AND d.is_deleted = 0
+        <if test="plateNo != null and plateNo != ''">
+            AND v.plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <include refid="scopeFilter"/>
+        ORDER BY v.plate_no
+    </select>
+
+    <!--
+        实时监控的订阅校验与在线统计：把请求的 SIM 集合交给 SQL 求与数据范围的交集。
+        调用方负责按 1000 条分批（IN 元素上限）。
+    -->
+    <select id="selectVehiclesInScopeBySimNos" resultMap="vehicleRowMap">
+        SELECT v.id, v.plate_no, v.sim_no, v.department_id, v.company_id
+        FROM cm_vehicle v
+        INNER JOIN cm_department d ON d.id = v.department_id
+        WHERE v.is_deleted = 0
+          AND d.is_deleted = 0
+          AND v.sim_no IN
+        <foreach collection="simNos" item="simNo" open="(" separator="," close=")">
+            #{simNo}
+        </foreach>
+        <include refid="scopeFilter"/>
+    </select>
+
+    <!-- 订阅时按车辆 ID 求交集，同样受服务端数据范围约束。 -->
+    <select id="selectVehiclesInScopeByIds" resultMap="vehicleRowMap">
+        SELECT v.id, v.plate_no, v.plate_color, v.sim_no, d.name AS department_name
+        FROM cm_vehicle v
+        INNER JOIN cm_department d ON d.id = v.department_id
+        WHERE v.is_deleted = 0
+          AND d.is_deleted = 0
+          AND v.id IN
+        <foreach collection="ids" item="vehicleId" open="(" separator="," close=")">
+            #{vehicleId}
+        </foreach>
+        <include refid="scopeFilter"/>
+    </select>
+</mapper>

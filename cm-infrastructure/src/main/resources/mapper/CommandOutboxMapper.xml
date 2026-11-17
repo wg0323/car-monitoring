@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmCommandOutboxMapper">
+
+    <resultMap id="outboxMap" type="com.cm.infrastructure.persistence.entity.CmCommandOutbox">
+        <id column="id" property="id"/>
+        <result column="command_id" property="commandId"/>
+        <result column="exchange_name" property="exchangeName"/>
+        <result column="routing_key" property="routingKey"/>
+        <result column="payload" property="payload"/>
+        <result column="publish_status" property="publishStatus"/>
+        <result column="confirm_at" property="confirmAt"/>
+        <result column="retry_count" property="retryCount"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_expire_at" property="leaseExpireAt"/>
+        <result column="next_retry_at" property="nextRetryAt"/>
+        <result column="is_deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="outboxColumns">
+        id, command_id, exchange_name, routing_key, payload, publish_status, confirm_at,
+        retry_count, lease_owner, lease_expire_at, next_retry_at, is_deleted,
+        create_time, update_time
+    </sql>
+
+    <!-- 原子抢占：SKIP LOCKED 让抢不到的行立即跳过，不等待其他实例的行锁。 -->
+    <select id="selectClaimable" resultMap="outboxMap">
+        SELECT
+        <include refid="outboxColumns"/>
+        FROM cm_command_outbox
+        WHERE publish_status = 'PENDING'
+          AND is_deleted = 0
+          AND (next_retry_at IS NULL OR next_retry_at &lt;= NOW(3))
+          AND (lease_expire_at IS NULL OR lease_expire_at &lt;= NOW(3))
+        ORDER BY id
+        LIMIT #{size}
+        FOR UPDATE SKIP LOCKED
+    </select>
+
+    <select id="selectByCommandId" resultMap="outboxMap">
+        SELECT
+        <include refid="outboxColumns"/>
+        FROM cm_command_outbox
+        WHERE command_id = #{commandId}
+          AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <update id="leaseByIds">
+        UPDATE cm_command_outbox
+        SET lease_owner = #{owner},
+            lease_expire_at = DATE_ADD(NOW(3), INTERVAL #{leaseSeconds} SECOND),
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE publish_status = 'PENDING'
+          AND is_deleted = 0
+          AND id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!-- 本次发布已发起。retry_count 同时充当发布尝试序号，旧回调无法覆盖新尝试；
+         lease_expire_at 换成 confirm 等待窗口，从发布时刻起算，而不是从抢占时刻起算。 -->
+    <update id="markPublished">
+        UPDATE cm_command_outbox
+        SET publish_status = 'PUBLISHED',
+            retry_count = #{publishAttempt},
+            exchange_name = #{exchangeName},
+            routing_key = #{routingKey},
+            payload = #{payload},
+            confirm_at = NULL,
+            next_retry_at = NULL,
+            lease_expire_at = DATE_ADD(NOW(3), INTERVAL #{confirmTimeoutSeconds} SECOND),
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND publish_status = 'PENDING'
+          AND retry_count = #{previousAttempt}
+          AND is_deleted = 0
+    </update>
+
+    <update id="markConfirmed">
+        UPDATE cm_command_outbox
+        SET publish_status = 'CONFIRMED',
+            confirm_at = CURRENT_TIMESTAMP(3),
+            lease_owner = '',
+            lease_expire_at = NULL,
+            next_retry_at = NULL,
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND publish_status = 'PUBLISHED'
+          AND retry_count = #{publishAttempt}
+          AND is_deleted = 0
+    </update>
+
+    <!-- nack、return 与 confirm 超时都回到 PENDING 等待退避重发，沿用同一 commandId。
+         退避时长由数据库时钟计算，避免多实例本地时钟偏差。 -->
+    <update id="markPendingRetry">
+        UPDATE cm_command_outbox
+        SET publish_status = 'PENDING',
+            next_retry_at = DATE_ADD(NOW(3), INTERVAL #{delayMillis} MICROSECOND),
+            lease_owner = '',
+            lease_expire_at = NULL,
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND publish_status = 'PUBLISHED'
+          AND retry_count = #{publishAttempt}
+          AND is_deleted = 0
+    </update>
+
+    <update id="markFailed">
+        UPDATE cm_command_outbox
+        SET publish_status = 'FAILED',
+            lease_owner = '',
+            lease_expire_at = NULL,
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND publish_status IN ('PENDING', 'PUBLISHED')
+          AND retry_count = #{publishAttempt}
+          AND is_deleted = 0
+    </update>
+
+    <!-- 未发出就退避：无路由等可恢复情况，尝试次数同样递增，耗尽后不再无限等待。 -->
+    <update id="markDeferred">
+        UPDATE cm_command_outbox
+        SET publish_status = 'PENDING',
+            retry_count = #{publishAttempt},
+            next_retry_at = DATE_ADD(NOW(3), INTERVAL #{delayMillis} MICROSECOND),
+            lease_owner = '',
+            lease_expire_at = NULL,
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND publish_status = 'PENDING'
+          AND retry_count = #{previousAttempt}
+          AND is_deleted = 0
+    </update>
+
+    <update id="markSkipped">
+        UPDATE cm_command_outbox
+        SET publish_status = 'SKIPPED',
+            lease_owner = '',
+            lease_expire_at = NULL,
+            next_retry_at = NULL,
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND is_deleted = 0
+          AND retry_count = #{publishAttempt}
+    </update>
+
+    <select id="selectExpiredPublished" resultMap="outboxMap">
+        SELECT
+        <include refid="outboxColumns"/>
+        FROM cm_command_outbox
+        WHERE publish_status = 'PUBLISHED'
+          AND is_deleted = 0
+          AND lease_expire_at IS NOT NULL
+          AND lease_expire_at &lt;= NOW(3)
+        ORDER BY id
+        LIMIT #{size}
+        FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="releaseLease">
+        UPDATE cm_command_outbox
+        SET lease_owner = '',
+            lease_expire_at = NULL,
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND retry_count = #{publishAttempt}
+          AND is_deleted = 0
+    </update>
+</mapper>

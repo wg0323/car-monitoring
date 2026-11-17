@@ -1,0 +1,132 @@
+spring:
+  application:
+    name: cm-admin-api
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: ${CM_DB_URL:jdbc:mysql://127.0.0.1:3306/car_monitoring?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${CM_DB_USERNAME:root}
+    password: ${CM_DB_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${CM_REDIS_HOST:127.0.0.1}
+      port: ${CM_REDIS_PORT:6379}
+      database: ${CM_REDIS_DATABASE:0}
+      password: ${CM_REDIS_PASSWORD:}
+  # Boot 4 的 MongoDB 属性前缀是 spring.mongodb，不再挂在 spring.data 下。
+  mongodb:
+    uri: ${CM_MONGO_URI:mongodb://127.0.0.1:27017/car_monitoring_telemetry}
+  rabbitmq:
+    host: ${CM_MQ_HOST:127.0.0.1}
+    port: ${CM_MQ_PORT:5672}
+    username: ${CM_MQ_USERNAME:cm_app}
+    password: ${CM_MQ_PASSWORD:}
+    virtual-host: ${CM_MQ_VHOST:cm}
+    publisher-confirm-type: correlated
+  # 数据库结构不在启动时迁移：docs/db/migration 下的版本脚本由开发或 DBA 按版本号人工执行。
+  session:
+    store-type: ${CM_SESSION_STORE:redis}
+    redis:
+      namespace: cm:session
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: ${CM_ADMIN_API_PORT:8081}
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+cm:
+  id:
+    worker-id: ${CM_ID_WORKER_ID:0}
+    datacenter-id: ${CM_ID_DATACENTER_ID:0}
+  command:
+    relay:
+      enabled: true
+    mq:
+      # 终端应答与死信的消费放在网关进程，管理端只负责 Outbox 转发与超时清扫。
+      consumers-enabled: false
+  telemetry:
+    # 定位链路的拓扑声明、消费者与在线对账只在接入网关开启。
+    mq:
+      consumers-enabled: false
+    online:
+      reconcile-enabled: false
+    # 集合初始化也不由管理端执行：管理端不消费定位数据，
+    # 让它参与 DDL 会把 Mongo 可用性变成管理端启动的硬依赖。
+    mongo:
+      auto-init: false
+  monitor:
+    # 必须与网关 cm.telemetry.broadcast.channel 一致，否则页面只能拿到首屏快照。
+    position-channel: ${CM_MONITOR_POSITION_CHANNEL:cm:telemetry:position}
+    summary-cache-seconds: 10
+    map:
+      engine: amap
+      # 地图 key 只走环境变量：不入仓库、不进前端构建产物。
+      key: ${CM_MAP_KEY:}
+      security-code: ${CM_MAP_SECURITY_CODE:}
+    subscribe:
+      max-vehicles-per-session: 200
+    session:
+      check-interval-millis: ${CM_MONITOR_SESSION_CHECK_MILLIS:30000}
+      account-check-interval-millis: 300000
+      heartbeat-timeout-millis: 90000
+  gov809:
+    # 与 cm-integration-809 共用同一环境变量：链路命令的落库与执行必须是同一接入码。
+    platform-id: ${CM_GOV809_PLATFORM_ID:8992}
+
+knife4j:
+  enable: true
+  production: ${CM_DOC_PRODUCTION:false}
+  setting:
+    language: zh_cn
+
+springdoc:
+  api-docs:
+    enabled: true
+  packages-to-scan: com.cm.admin.controller
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: cm-admin-api
+    stage: P4
+    description: 登录会话、菜单与按钮权限、部门数据范围与车辆列表已接入；其余功能域按 feature-mapping 逐步迁移
+
+logging:
+  level:
+    root: INFO
+    com.cm: INFO

@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.2</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.cm</groupId>
+    <artifactId>car-monitoring</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>car-monitoring</name>
+    <description>车辆监控平台升级工程：四个后端部署单元 + Vue 3 管理端</description>
+
+    <modules>
+        <module>cm-protocol</module>
+        <module>cm-domain</module>
+        <module>cm-infrastructure</module>
+        <module>cm-transport-netty</module>
+        <module>cm-gateway-808</module>
+        <module>cm-integration-809</module>
+        <module>cm-gov-809</module>
+        <module>cm-admin-api</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <java.version>17</java.version>
+        <maven.compiler.release>17</maven.compiler.release>
+        <maven.test.skip>true</maven.test.skip>
+        <mybatis-plus.version>3.5.18</mybatis-plus.version>
+        <knife4j.version>5.8.2</knife4j.version>
+        <easyexcel.version>3.3.4</easyexcel.version>
+        <maven-enforcer-plugin.version>3.6.1</maven-enforcer-plugin.version>
+        <!-- Boot 4.1.2 BOM 管理 5.30.0，但 spring-rabbit 4.1.2 要求 5.31.0；覆盖属性使依赖上界收敛。 -->
+        <rabbit-amqp-client.version>5.31.0</rabbit-amqp-client.version>
+        <!-- Knife4j Boot4 starter 5.8.2 官方基线：Jackson 2 2.22.4 / Jackson 3 3.1.8（CVE-2026-110879）。 -->
+        <jackson-bom.version>3.1.8</jackson-bom.version>
+        <jackson-2-bom.version>2.22.4</jackson-2-bom.version>
+    </properties>
+
+    <!-- 版本只在此处声明。子模块 pom 不得为依赖写 <version>，由 scripts/check-dependency-convergence.ps1 机械校验。 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <!-- Boot 4.x WebMVC 专用：内置 springdoc 3.0.3；Boot 3.x Jakarta 版在 Boot 4.1 下会因 WebMvcProperties 缺类启动失败。 -->
+            <dependency>
+                <groupId>com.baizhukui</groupId>
+                <artifactId>knife4j-openapi3-boot4-spring-boot-starter</artifactId>
+                <version>${knife4j.version}</version>
+            </dependency>
+            <!-- Excel 导出：EasyExcel 3.3.4 已归档但为当前离线仓库可用版本，封装在 ReportExcelWriter 后可平移 Apache Fesod。 -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>easyexcel</artifactId>
+                <version>${easyexcel.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.cm</groupId>
+                <artifactId>cm-protocol</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.cm</groupId>
+                <artifactId>cm-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.cm</groupId>
+                <artifactId>cm-infrastructure</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.cm</groupId>
+                <artifactId>cm-transport-netty</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <parameters>true</parameters>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>require-java-and-maven</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[17,18)</version>
+                                    <message>P1 工程要求 JDK 17，禁止用 JDK 8/21 构建新工程</message>
+                                </requireJavaVersion>
+                                <requireMavenVersion>
+                                    <version>[3.9,)</version>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- 显式触发的依赖收敛检查：mvn -Pdependency-convergence validate -->
+        <profile>
+            <id>dependency-convergence</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>${maven-enforcer-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>require-upper-bound-deps</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireUpperBoundDeps>
+                                            <!-- Jackson 2 / 3 已按 Knife4j 官方基线覆盖到 2.22.4 / 3.1.8（见 properties），
+                                                 不再豁免序列化依赖。仅剩 Spring 自身对 commons-logging 的声明互相不一致，
+                                                 以及 commons-lang3 的传递差异，这两项由 Boot 4.1.2 BOM 统一管理；P4 复核后移除。 -->
+                                            <excludes>
+                                                <exclude>org.apache.commons:commons-lang3</exclude>
+                                                <exclude>commons-logging:commons-logging</exclude>
+                                            </excludes>
+                                        </requireUpperBoundDeps>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

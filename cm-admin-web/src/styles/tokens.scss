@@ -1,0 +1,47 @@
+// 交通调度蓝：唯一的色值与尺寸来源。组件内只使用 --cm-* 语义变量，不出现原始 hex。
+:root {
+  --cm-color-brand: #1e40af;
+  --cm-color-brand-secondary: #3b82f6;
+  --cm-color-warning: #d97706;
+  --cm-color-online: #16a34a;
+  --cm-color-alarm: #dc2626;
+  --cm-color-neutral: #64748b;
+  --cm-color-page: #f8fafc;
+  --cm-color-card: #fff;
+  --cm-color-text: #0f172a;
+  --cm-color-text-secondary: #475569;
+  --cm-color-border: #e2e8f0;
+
+  --cm-font-cn: 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
+  --cm-font-mono: 'Consolas', 'JetBrains Mono', monospace;
+  --cm-font-size: 14px;
+  --cm-line-height: 1.5;
+  --cm-space-1: 8px;
+  --cm-space-2: 12px;
+  --cm-space-3: 16px;
+  --cm-space-4: 24px;
+  --cm-row-height: 34px;
+  --cm-control-height: 30px;
+  --cm-radius: 2px;
+  --cm-transition: 180ms ease;
+  --cm-min-width: 1280px;
+
+  // Element Plus 官方 CSS Vars 覆盖：全量引入 dist CSS 时以此生效。
+  --el-color-primary: var(--cm-color-brand);
+  --el-color-primary-light-3: var(--cm-color-brand-secondary);
+  --el-color-success: var(--cm-color-online);
+  --el-color-warning: var(--cm-color-warning);
+  --el-color-danger: var(--cm-color-alarm);
+  --el-color-info: var(--cm-color-neutral);
+  --el-text-color-primary: var(--cm-color-text);
+  --el-text-color-regular: var(--cm-color-text-secondary);
+  --el-border-color: var(--cm-color-border);
+  --el-font-size-base: var(--cm-font-size);
+  --el-border-radius-base: var(--cm-radius);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cm-transition: 0ms;
+  }
+}

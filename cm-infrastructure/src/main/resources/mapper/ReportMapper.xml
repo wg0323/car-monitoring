@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.ReportMapper">
+
+    <!-- 所有查询结果都映射到显式行对象，不返回 HashMap；不使用 SELECT *。 -->
+    <resultMap id="departmentRowMap" type="com.cm.infrastructure.persistence.row.DepartmentRow">
+        <result column="id" property="id"/>
+        <result column="parent_id" property="parentId"/>
+        <result column="name" property="name"/>
+        <result column="company_id" property="companyId"/>
+    </resultMap>
+
+    <resultMap id="operationLogRowMap" type="com.cm.infrastructure.persistence.row.OperationLogRow">
+        <result column="user_name" property="userName"/>
+        <result column="operation_descr" property="operationDescr"/>
+        <result column="detail" property="detail"/>
+        <result column="ip" property="ip"/>
+        <result column="url" property="url"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <resultMap id="onlineRateRowMap" type="com.cm.infrastructure.persistence.row.OnlineRateRow">
+        <result column="statistic_date" property="statisticDate"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="vehicle_num" property="vehicleNum"/>
+        <result column="online_num" property="onlineNum"/>
+        <result column="offline_num" property="offlineNum"/>
+        <result column="online_rate" property="onlineRate"/>
+    </resultMap>
+
+    <resultMap id="mileageStatisticRowMap" type="com.cm.infrastructure.persistence.row.MileageStatisticRow">
+        <result column="statistic_date" property="statisticDate"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="mileage" property="mileage"/>
+        <result column="oil" property="oil"/>
+        <result column="work_hour" property="workHour"/>
+    </resultMap>
+
+    <resultMap id="onlineRecordRowMap" type="com.cm.infrastructure.persistence.row.OnlineRecordRow">
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="event_type" property="eventType"/>
+        <result column="alarm_type" property="alarmType"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="location" property="location"/>
+        <result column="time_span" property="timeSpan"/>
+        <result column="velocity" property="velocity"/>
+        <result column="driver" property="driver"/>
+    </resultMap>
+
+    <resultMap id="alarmStatisticRowMap" type="com.cm.infrastructure.persistence.row.AlarmStatisticRow">
+        <result column="alarm_type" property="alarmType"/>
+        <result column="alarm_count" property="alarmCount"/>
+        <result column="processed_count" property="processedCount"/>
+    </resultMap>
+
+    <select id="selectDepartments" resultMap="departmentRowMap">
+        SELECT d.id, d.parent_id, d.name, d.company_id
+        FROM cm_department d
+        WHERE d.is_deleted = 0
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND d.id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        ORDER BY d.parent_id, d.name
+    </select>
+
+    <!-- 对应旧 report.selectOperationLog：字典从 basicData 改为统一字典表 cm_dict_item。 -->
+    <select id="selectOperationLog" resultMap="operationLogRowMap">
+        SELECT f.user_name,
+               f.operation_descr,
+               f.detail,
+               f.ip,
+               f.url,
+               f.create_time
+        FROM cm_operation_log f
+        WHERE f.is_deleted = 0
+          AND f.operation_code &lt;&gt; 'operationLog.action'
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND f.company_id IN
+                <foreach collection="scope.companyIds" item="companyId" open="(" separator="," close=")">
+                    #{companyId}
+                </foreach>
+            </when>
+        </choose>
+        <if test="userName != null and userName != ''">
+            AND f.user_name LIKE CONCAT(#{userName}, '%')
+        </if>
+        <if test="startTime != null">
+            AND f.create_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND f.create_time &lt;= #{endTime}
+        </if>
+        ORDER BY f.create_time DESC, f.id
+    </select>
+
+    <select id="selectDepartmentOnlineRate" resultMap="onlineRateRowMap">
+        SELECT f.statistic_date,
+               d.name AS department_name,
+               NULL AS plate_no,
+               f.vehicle_num,
+               f.online_num,
+               f.offline_num,
+               f.online_rate
+        FROM cm_online_statistic f
+        INNER JOIN cm_department d ON d.id = f.department_id
+        WHERE f.is_deleted = 0
+          AND d.is_deleted = 0
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND f.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        <if test="startTime != null">
+            AND f.statistic_date &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND f.statistic_date &lt;= #{endTime}
+        </if>
+        ORDER BY f.statistic_date DESC, d.name
+    </select>
+
+    <select id="selectVehicleOnlineRate" resultMap="onlineRateRowMap">
+        SELECT f.statistic_date,
+               NULL AS department_name,
+               f.plate_no,
+               NULL AS vehicle_num,
+               NULL AS online_num,
+               NULL AS offline_num,
+               f.online_rate
+        FROM cm_vehicle_online_rate f
+        WHERE f.is_deleted = 0
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND f.plate_no IN (
+                    SELECT v.plate_no
+                    FROM cm_vehicle v
+                    WHERE v.is_deleted = 0
+                      AND v.department_id IN
+                      <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                          #{deptId}
+                      </foreach>
+                )
+            </when>
+        </choose>
+        <if test="startTime != null">
+            AND f.statistic_date &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND f.statistic_date &lt;= #{endTime}
+        </if>
+        ORDER BY f.statistic_date DESC, f.plate_no
+    </select>
+
+    <select id="selectMileageStatistic" resultMap="mileageStatisticRowMap">
+        SELECT f.statistic_date,
+               f.plate_no,
+               f.department_name,
+               f.mileage,
+               f.oil,
+               f.work_hour
+        FROM cm_mileage_statistic f
+        WHERE f.is_deleted = 0
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND f.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        <if test="startTime != null">
+            AND f.statistic_date &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND f.statistic_date &lt;= #{endTime}
+        </if>
+        ORDER BY f.statistic_date DESC, f.plate_no
+    </select>
+
+    <select id="selectOnlineRecord" resultMap="onlineRecordRowMap">
+        SELECT f.plate_no,
+               f.event_type,
+               f.alarm_type,
+               f.start_time,
+               f.end_time,
+               f.location,
+               f.driver
+        FROM cm_online_record f
+        WHERE f.is_deleted = 0
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND f.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        <if test="plateNo != null and plateNo != ''">
+            AND f.plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <if test="startTime != null">
+            AND f.start_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND f.start_time &lt;= #{endTime}
+        </if>
+        ORDER BY f.start_time DESC, f.event_key
+    </select>
+
+    <!-- 上下线记录报表筛选：列表与导出共用，口径对齐旧 report.selectOnlineRecord。 -->
+    <sql id="onlineRecordFilter">
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND f.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        <if test="plateNo != null and plateNo != ''">
+            AND f.plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <if test="eventType != null and eventType != ''">
+            AND f.event_type = #{eventType}
+        </if>
+        <if test="departmentId != null">
+            AND f.department_id = #{departmentId}
+        </if>
+        <if test="startTime != null">
+            AND f.start_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND f.start_time &lt;= #{endTime}
+        </if>
+    </sql>
+
+    <select id="selectOnlineRecordPage" resultMap="onlineRecordRowMap">
+        SELECT f.plate_no,
+               f.event_type,
+               f.alarm_type,
+               f.start_time,
+               f.end_time,
+               f.location,
+               f.time_span,
+               f.velocity,
+               f.driver,
+               v.plate_color,
+               d.name AS department_name
+        FROM cm_online_record f
+        LEFT JOIN cm_vehicle v ON v.plate_no = f.plate_no AND v.is_deleted = 0
+        LEFT JOIN cm_department d ON d.id = f.department_id AND d.is_deleted = 0
+        WHERE f.is_deleted = 0
+        <include refid="onlineRecordFilter"/>
+        ORDER BY f.start_time DESC, f.event_key
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countOnlineRecord" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_online_record f
+        WHERE f.is_deleted = 0
+        <include refid="onlineRecordFilter"/>
+    </select>
+
+    <select id="selectOnlineRecordRows" resultMap="onlineRecordRowMap">
+        SELECT f.plate_no,
+               f.event_type,
+               f.alarm_type,
+               f.start_time,
+               f.end_time,
+               f.location,
+               f.time_span,
+               f.velocity,
+               f.driver,
+               v.plate_color,
+               d.name AS department_name
+        FROM cm_online_record f
+        LEFT JOIN cm_vehicle v ON v.plate_no = f.plate_no AND v.is_deleted = 0
+        LEFT JOIN cm_department d ON d.id = f.department_id AND d.is_deleted = 0
+        WHERE f.is_deleted = 0
+        <include refid="onlineRecordFilter"/>
+        ORDER BY f.start_time DESC, f.event_key
+        LIMIT #{maxRows}
+    </select>
+
+    <!-- 旧 report.xml 用两张报警表 UNION ALL；新库合并为单表，直接聚合。 -->
+    <select id="selectAlarmStatistic" resultMap="alarmStatisticRowMap">
+        SELECT f.alarm_type,
+               COUNT(*) AS alarm_count,
+               IFNULL(SUM(CASE WHEN f.is_processed = 1 THEN 1 ELSE 0 END), 0) AS processed_count
+        FROM cm_alarm_record f
+        WHERE f.is_deleted = 0
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND f.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        <if test="startTime != null">
+            AND f.start_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND f.start_time &lt;= #{endTime}
+        </if>
+        GROUP BY f.alarm_type
+        ORDER BY f.alarm_type
+    </select>
+</mapper>

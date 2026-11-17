@@ -1,0 +1,19 @@
+logging:
+  level:
+    root: WARN
+    com.cm: INFO
+management:
+  endpoint:
+    health:
+      show-details: never
+cm:
+  gateway:
+    # 生产不给默认值：缺 CM_GATEWAY_AUTH_CODE 时启动即失败，避免拿开发码上线。
+    auth-code: ${CM_GATEWAY_AUTH_CODE}
+  command:
+    mq:
+      # 生产用 quorum queue：classic 不复制消息内容，单节点故障即丢消息（方案 11.3）。
+      queue-type: quorum
+  telemetry:
+    mq:
+      queue-type: quorum

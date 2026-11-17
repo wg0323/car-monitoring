@@ -1,0 +1,31 @@
+@use './tokens.scss';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: var(--cm-min-width);
+  background: var(--cm-color-page);
+  color: var(--cm-color-text);
+  font-family: var(--cm-font-cn);
+  font-size: var(--cm-font-size);
+  line-height: var(--cm-line-height);
+}
+
+.cm-mono {
+  font-family: var(--cm-font-mono);
+}
+
+.cm-focusable:focus-visible {
+  outline: 2px solid var(--cm-color-brand);
+  outline-offset: 2px;
+}

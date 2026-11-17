@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmJt809CommandMapper">
+
+    <resultMap id="commandMap" type="com.cm.infrastructure.persistence.entity.CmJt809Command">
+        <id column="id" property="id"/>
+        <result column="platform_id" property="platformId"/>
+        <result column="sn" property="sn"/>
+        <result column="cmd" property="cmd"/>
+        <result column="sub_cmd" property="subCmd"/>
+        <result column="cmd_data" property="cmdData"/>
+        <result column="descr" property="descr"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="sim_no" property="simNo"/>
+        <result column="source" property="source"/>
+        <result column="command_status" property="commandStatus"/>
+        <result column="user_id" property="userId"/>
+        <result column="company_id" property="companyId"/>
+        <result column="is_deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="commandColumns">
+        id, platform_id, sn, cmd, sub_cmd, cmd_data, descr, plate_no, plate_color, sim_no,
+        source, command_status, user_id, company_id, is_deleted, create_time, update_time
+    </sql>
+
+    <!-- 车牌只做前缀匹配；时间窗按创建时间过滤，能命中 idx_plate_time。 -->
+    <sql id="queryFilter">
+        <if test="query.source != null and query.source != ''">
+            AND source = #{query.source}
+        </if>
+        <if test="query.plateNo != null and query.plateNo != ''">
+            AND plate_no LIKE CONCAT(#{query.plateNo}, '%')
+        </if>
+        <if test="query.status != null and query.status != ''">
+            AND command_status = #{query.status}
+        </if>
+        <if test="query.startTime != null">
+            AND create_time &gt;= #{query.startTime}
+        </if>
+        <if test="query.endTime != null">
+            AND create_time &lt;= #{query.endTime}
+        </if>
+    </sql>
+
+    <select id="selectPageByQuery" resultMap="commandMap">
+        SELECT
+        <include refid="commandColumns"/>
+        FROM cm_jt809_command
+        WHERE is_deleted = 0
+        <include refid="queryFilter"/>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countByQuery" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_jt809_command
+        WHERE is_deleted = 0
+        <include refid="queryFilter"/>
+    </select>
+
+    <!-- 只取管理端写入、尚未执行的链路命令；执行记录不回读。
+         '待下发'/'执行中' 与 GovCommandStatus 常量对应，改文案时两处必须同步。 -->
+    <select id="selectPending" resultMap="commandMap">
+        SELECT
+        <include refid="commandColumns"/>
+        FROM cm_jt809_command
+        WHERE source = 'SEND'
+          AND command_status = '待下发'
+          AND is_deleted = 0
+        ORDER BY id
+        LIMIT #{limit}
+    </select>
+
+    <update id="claimForExecution">
+        UPDATE cm_jt809_command
+        SET command_status = '执行中',
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND command_status = '待下发'
+          AND is_deleted = 0
+    </update>
+
+    <update id="markExecutionResult">
+        UPDATE cm_jt809_command
+        SET command_status = #{status},
+            descr = #{descr},
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE id = #{id}
+          AND command_status = '执行中'
+          AND is_deleted = 0
+    </update>
+
+    <!-- 执行中超时回收：update_time 由抢占时写入，超过窗口仍停在执行中就说明执行方已崩溃。 -->
+    <update id="recoverStaleExecution">
+        UPDATE cm_jt809_command
+        SET command_status = '发送失败',
+            descr = CONCAT(descr, '（执行超时）'),
+            update_time = CURRENT_TIMESTAMP(3)
+        WHERE source = 'SEND'
+          AND command_status = '执行中'
+          AND update_time &lt; #{staleBefore}
+          AND is_deleted = 0
+    </update>
+</mapper>

@@ -1,0 +1,103 @@
+spring:
+  application:
+    name: cm-gov-809
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: ${CM_DB_URL:jdbc:mysql://127.0.0.1:3306/car_monitoring?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${CM_DB_USERNAME:cm_app}
+    password: ${CM_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${CM_REDIS_HOST:127.0.0.1}
+      port: ${CM_REDIS_PORT:6379}
+      database: ${CM_REDIS_DATABASE:0}
+      password: ${CM_REDIS_PASSWORD:}
+  mongodb:
+    uri: ${CM_MONGO_URI:mongodb://127.0.0.1:27017/car_monitoring_telemetry}
+  rabbitmq:
+    host: ${CM_MQ_HOST:127.0.0.1}
+    port: ${CM_MQ_PORT:5672}
+    username: ${CM_MQ_USERNAME:cm_app}
+    password: ${CM_MQ_PASSWORD:}
+    virtual-host: ${CM_MQ_VHOST:cm}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: ${CM_GOV_809_HTTP_PORT:18083}
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: cm-gov-809
+    stage: P3
+    description: 监管侧 JT809 监听（19100）、下级平台主从链路与报警督办下发
+
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+cm:
+  id:
+    # 与网关（1）、集成（2）、管理端（0）区分开。
+    worker-id: ${CM_ID_WORKER_ID:3}
+    datacenter-id: ${CM_ID_DATACENTER_ID:0}
+  command:
+    # 监管侧不消费指令应答与指令死信，也不做指令超时清扫，它们归网关与管理端。
+    relay:
+      sweep-enabled: false
+    mq:
+      consumers-enabled: false
+  gov809:
+    mq:
+      # 监管侧不声明也不消费转发队列。
+      declare-enabled: false
+      consume-enabled: false
+    server:
+      enabled: ${CM_GOV809_SERVER_ENABLED:true}
+      # 19100 是旧系统实测的监管侧监听端口（config.properties 里的 19400 是死配置）。
+      listen-port: ${CM_GOV809_LISTEN_PORT:19100}
+      listen-address: ${CM_GOV809_LISTEN_ADDRESS:0.0.0.0}
+      heartbeat-interval-seconds: 20
+      idle-timeout-seconds: 60
+      write-timeout-millis: 10000
+      sub-link-connect-timeout-millis: 5000
+      sub-link-idle-timeout-seconds: 25
+      zone: Asia/Shanghai
+
+logging:
+  level:
+    root: INFO
+    com.cm: INFO

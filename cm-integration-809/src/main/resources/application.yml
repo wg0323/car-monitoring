@@ -1,0 +1,128 @@
+spring:
+  application:
+    name: cm-integration-809
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: ${CM_DB_URL:jdbc:mysql://127.0.0.1:3306/car_monitoring?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${CM_DB_USERNAME:cm_app}
+    password: ${CM_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${CM_REDIS_HOST:127.0.0.1}
+      port: ${CM_REDIS_PORT:6379}
+      database: ${CM_REDIS_DATABASE:0}
+      password: ${CM_REDIS_PASSWORD:}
+  # Boot 4 的 MongoDB 属性前缀是 spring.mongodb，不再挂在 spring.data 下。
+  mongodb:
+    uri: ${CM_MONGO_URI:mongodb://127.0.0.1:27017/car_monitoring_telemetry}
+  rabbitmq:
+    host: ${CM_MQ_HOST:127.0.0.1}
+    port: ${CM_MQ_PORT:5672}
+    username: ${CM_MQ_USERNAME:cm_app}
+    password: ${CM_MQ_PASSWORD:}
+    virtual-host: ${CM_MQ_VHOST:cm}
+    publisher-confirm-type: correlated
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  task:
+    scheduling:
+      pool:
+        size: 2
+
+server:
+  port: ${CM_INTEGRATION_809_HTTP_PORT:18082}
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: cm-integration-809
+    stage: P3
+    description: 企业侧 JT809 主链路客户端、12345 从链路监听、位置转发与断链补发
+
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+cm:
+  id:
+    # 与网关（1）、管理端（0）区分开，避免雪花 ID 冲突。
+    worker-id: ${CM_ID_WORKER_ID:2}
+    datacenter-id: ${CM_ID_DATACENTER_ID:0}
+  command:
+    # 809 进程不消费指令应答与指令死信，也不做指令超时清扫，它们归网关与管理端。
+    relay:
+      sweep-enabled: false
+    mq:
+      consumers-enabled: false
+  gov809:
+    enabled: ${CM_GOV809_ENABLED:true}
+    # 接入码、账号与密码取自旧仓库 gps-jt809server/config.properties 的实测口径。
+    platform-id: ${CM_GOV809_PLATFORM_ID:8992}
+    login-user-id: ${CM_GOV809_LOGIN_USER_ID:8992}
+    login-password: ${CM_GOV809_LOGIN_PASSWORD:12345678}
+    upstream-host: ${CM_GOV809_UPSTREAM_HOST:127.0.0.1}
+    upstream-port: ${CM_GOV809_UPSTREAM_PORT:19100}
+    sub-link-bind-address: ${CM_GOV809_SUBLINK_BIND:0.0.0.0}
+    sub-link-advertise-ip: ${CM_GOV809_SUBLINK_IP:127.0.0.1}
+    sub-link-port: ${CM_GOV809_SUBLINK_PORT:12345}
+    heartbeat-interval-seconds: 20
+    idle-timeout-seconds: 60
+    reconnect-initial-millis: 5000
+    reconnect-max-millis: 60000
+    write-timeout-millis: 10000
+    replay-batch-size: 30
+    replay-max-rows: 5000
+    checkpoint-flush-millis: 1000
+    zone: Asia/Shanghai
+    mq:
+      exchange: cm.telemetry
+      routing-key-pattern: telemetry.position.*
+      forward-queue: gov809.forward
+      dead-letter-exchange: cm.gov809.dlx
+      dead-queue: gov809.forward.dlq
+      # 拓扑只由本进程声明；管理端与监管侧只读配置。
+      declare-enabled: true
+      consume-enabled: ${CM_GOV809_CONSUME_ENABLED:true}
+      queue-type: ${CM_GOV809_QUEUE_TYPE:classic}
+      prefetch-count: 50
+    outbox:
+      max-pending: 200000
+      prune-batch: 1000
+      max-attempt: 5
+
+logging:
+  level:
+    root: INFO
+    com.cm: INFO

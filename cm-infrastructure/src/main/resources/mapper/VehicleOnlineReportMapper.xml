@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.VehicleOnlineReportMapper">
+
+    <resultMap id="onlineVehicleReportRowMap"
+               type="com.cm.infrastructure.persistence.row.VehicleOnlineReportRow">
+        <result column="id" property="id"/>
+        <result column="plate_no" property="plateNo"/>
+        <result column="plate_color" property="plateColor"/>
+        <result column="sim_no" property="simNo"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="run_status" property="runStatus"/>
+        <result column="vehicle_type" property="vehicleType"/>
+        <result column="install_date" property="installDate"/>
+    </resultMap>
+
+    <!--
+        当前在线报表的候选车辆。在线态来自 Redis 租约，SQL 只做数据范围与关键字过滤。
+        LIMIT 防止无界查询把全部车辆装进内存；单账号可见车辆远低于此上限。
+    -->
+    <select id="selectOnlineVehicleCandidates" resultMap="onlineVehicleReportRowMap">
+        SELECT v.id,
+               v.plate_no,
+               v.plate_color,
+               v.sim_no,
+               d.name AS department_name,
+               v.run_status,
+               v.vehicle_type,
+               v.install_date
+        FROM cm_vehicle v
+        INNER JOIN cm_department d ON d.id = v.department_id
+        WHERE v.is_deleted = 0
+          AND d.is_deleted = 0
+        <if test="plateNo != null and plateNo != ''">
+            AND v.plate_no LIKE CONCAT(#{plateNo}, '%')
+        </if>
+        <if test="simNo != null and simNo != ''">
+            AND v.sim_no LIKE CONCAT(#{simNo}, '%')
+        </if>
+        <if test="departmentId != null">
+            AND v.department_id = #{departmentId}
+        </if>
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND v.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+        ORDER BY v.plate_no
+        LIMIT 20000
+    </select>
+</mapper>

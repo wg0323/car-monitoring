@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmMileageStatisticMapper">
+
+    <!--
+      当日里程用绝对值覆盖，不用增量累加：定时任务重跑、网关重启、重复 flush 结果都相同。
+      work_hour 暂写 0：旧里程报表不展示工时列，这里不把未实现的统计写成已知值。
+    -->
+    <insert id="upsertDaily">
+        INSERT INTO cm_mileage_statistic (id, company_id, department_id, department_name, plate_no,
+                                          period_type, period_descr, statistic_date, work_hour,
+                                          mileage, mileage1, mileage2, oil, oil1, oil2,
+                                          is_deleted, create_time, update_time)
+        VALUES (#{record.id}, #{record.companyId}, #{record.departmentId}, #{record.departmentName},
+                #{record.plateNo}, #{record.periodType}, #{record.periodDescr}, #{record.statisticDate},
+                0, #{record.mileage}, #{record.mileage1}, #{record.mileage2},
+                0, 0, 0, 0, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)) AS new_row
+        ON DUPLICATE KEY UPDATE company_id = new_row.company_id,
+                                department_id = new_row.department_id,
+                                department_name = new_row.department_name,
+                                mileage = new_row.mileage,
+                                mileage1 = new_row.mileage1,
+                                mileage2 = new_row.mileage2,
+                                update_time = CURRENT_TIMESTAMP(3)
+    </insert>
+</mapper>

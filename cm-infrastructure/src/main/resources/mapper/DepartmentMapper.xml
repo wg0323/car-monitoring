@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmDepartmentMapper">
+
+    <!-- 车辆分组管理页的显式结果映射，不返回 HashMap。 -->
+    <resultMap id="departmentDetailRowMap" type="com.cm.infrastructure.persistence.row.DepartmentDetailRow">
+        <result column="id" property="id"/>
+        <result column="parent_id" property="parentId"/>
+        <result column="parent_name" property="parentName"/>
+        <result column="company_id" property="companyId"/>
+        <result column="name" property="name"/>
+        <result column="department_type" property="departmentType"/>
+        <result column="member_no" property="memberNo"/>
+        <result column="road_permit_word" property="roadPermitWord"/>
+        <result column="road_permit_no" property="roadPermitNo"/>
+        <result column="business_scope" property="businessScope"/>
+        <result column="region" property="region"/>
+        <result column="contact_person" property="contactPerson"/>
+        <result column="contact_phone" property="contactPhone"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 数据范围由服务端注入；scope 缺失时 fail-closed。 -->
+    <sql id="scopeFilter">
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND d.id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+    </sql>
+
+    <sql id="detailColumns">
+        d.id,
+        d.parent_id,
+        p.name AS parent_name,
+        d.company_id,
+        d.name,
+        d.department_type,
+        d.member_no,
+        d.road_permit_word,
+        d.road_permit_no,
+        d.business_scope,
+        d.region,
+        d.contact_person,
+        d.contact_phone,
+        d.remark,
+        d.create_time
+    </sql>
+
+    <select id="selectDepartmentsInScope" resultMap="departmentDetailRowMap">
+        SELECT
+        <include refid="detailColumns"/>
+        FROM cm_department d
+        LEFT JOIN cm_department p ON p.id = d.parent_id AND p.is_deleted = 0
+        WHERE d.is_deleted = 0
+        <if test="keyword != null and keyword != ''">
+            AND d.name LIKE CONCAT(#{keyword}, '%')
+        </if>
+        <include refid="scopeFilter"/>
+        ORDER BY d.parent_id, d.name
+    </select>
+
+    <select id="selectDepartmentInScope" resultMap="departmentDetailRowMap">
+        SELECT
+        <include refid="detailColumns"/>
+        FROM cm_department d
+        LEFT JOIN cm_department p ON p.id = d.parent_id AND p.is_deleted = 0
+        WHERE d.is_deleted = 0
+          AND d.id = #{id}
+        <include refid="scopeFilter"/>
+    </select>
+
+    <!-- uk_name 覆盖已逻辑删除的行，这里同样不按 is_deleted 过滤。 -->
+    <select id="countByName" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_department
+        WHERE name = #{name}
+        <if test="excludeId != null">
+            AND id &lt;&gt; #{excludeId}
+        </if>
+    </select>
+
+    <select id="countChildren" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_department
+        WHERE parent_id = #{id}
+          AND is_deleted = 0
+    </select>
+
+    <select id="countVehicles" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_vehicle
+        WHERE department_id = #{id}
+          AND is_deleted = 0
+    </select>
+
+    <select id="selectDescendantIds" resultType="long">
+        WITH RECURSIVE subtree AS (
+            SELECT id
+            FROM cm_department
+            WHERE parent_id = #{id}
+              AND is_deleted = 0
+            UNION ALL
+            SELECT child.id
+            FROM cm_department child
+            INNER JOIN subtree parent ON child.parent_id = parent.id
+            WHERE child.is_deleted = 0
+        )
+        SELECT id FROM subtree
+    </select>
+</mapper>

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cm.infrastructure.persistence.mapper.CmMapAreaMapper">
+
+    <!-- 列表与详情共用的显式结果映射；布尔列 is_xxx 对应属性无 is 前缀。 -->
+    <resultMap id="mapAreaRowMap" type="com.cm.infrastructure.persistence.row.MapAreaRow">
+        <id column="id" property="id"/>
+        <result column="department_id" property="departmentId"/>
+        <result column="department_name" property="departmentName"/>
+        <result column="name" property="name"/>
+        <result column="area_type" property="areaType"/>
+        <result column="points" property="points"/>
+        <result column="center_lat" property="centerLat"/>
+        <result column="center_lng" property="centerLng"/>
+        <result column="radius" property="radius"/>
+        <result column="is_alarm_enter_driver" property="alarmEnterDriver"/>
+        <result column="is_alarm_enter_platform" property="alarmEnterPlatform"/>
+        <result column="is_alarm_exit_driver" property="alarmExitDriver"/>
+        <result column="is_alarm_exit_platform" property="alarmExitPlatform"/>
+        <result column="is_by_time" property="byTime"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+        <result column="is_limit_speed" property="limitSpeed"/>
+        <result column="max_speed" property="maxSpeed"/>
+        <result column="delay_seconds" property="delaySeconds"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!-- 数据范围由服务端注入；scope 缺失时 fail-closed，绝不能退化成全量查询。 -->
+    <sql id="scopeFilter">
+        <choose>
+            <when test="scope == null">
+                AND 1 = 0
+            </when>
+            <when test="!scope.superAdmin">
+                AND a.department_id IN
+                <foreach collection="scope.departmentIds" item="deptId" open="(" separator="," close=")">
+                    #{deptId}
+                </foreach>
+            </when>
+        </choose>
+    </sql>
+
+    <!-- 名称前缀匹配，与车辆列表同一口径：不走左模糊，能命中 idx_name。 -->
+    <sql id="nameFilter">
+        <if test="name != null and name != ''">
+            AND a.name LIKE CONCAT(#{name}, '%')
+        </if>
+    </sql>
+
+    <!-- 部门筛选值已在服务端校验落在数据范围内，这里只做等值过滤。 -->
+    <sql id="departmentFilter">
+        <if test="departmentId != null">
+            AND a.department_id = #{departmentId}
+        </if>
+    </sql>
+
+    <sql id="rowColumns">
+        a.id,
+        a.department_id,
+        d.name AS department_name,
+        a.name,
+        a.area_type,
+        a.points,
+        a.center_lat,
+        a.center_lng,
+        a.radius,
+        a.is_alarm_enter_driver,
+        a.is_alarm_enter_platform,
+        a.is_alarm_exit_driver,
+        a.is_alarm_exit_platform,
+        a.is_by_time,
+        a.start_date,
+        a.end_date,
+        a.is_limit_speed,
+        a.max_speed,
+        a.delay_seconds,
+        a.remark,
+        a.create_time,
+        a.update_time
+    </sql>
+
+    <select id="selectMapAreaPage" resultMap="mapAreaRowMap">
+        SELECT
+        <include refid="rowColumns"/>
+        FROM cm_map_area a
+        INNER JOIN cm_department d ON d.id = a.department_id
+        WHERE a.is_deleted = 0
+          AND d.is_deleted = 0
+        <include refid="nameFilter"/>
+        <include refid="departmentFilter"/>
+        <include refid="scopeFilter"/>
+        ORDER BY a.update_time DESC, a.id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <!-- 与列表同一份筛选口径，避免 total 与行集对不上。 -->
+    <select id="countMapAreaPage" resultType="long">
+        SELECT COUNT(*)
+        FROM cm_map_area a
+        INNER JOIN cm_department d ON d.id = a.department_id
+        WHERE a.is_deleted = 0
+          AND d.is_deleted = 0
+        <include refid="nameFilter"/>
+        <include refid="departmentFilter"/>
+        <include refid="scopeFilter"/>
+    </select>
+
+    <select id="selectMapAreaInScope" resultMap="mapAreaRowMap">
+        SELECT
+        <include refid="rowColumns"/>
+        FROM cm_map_area a
+        INNER JOIN cm_department d ON d.id = a.department_id
+        WHERE a.is_deleted = 0
+          AND d.is_deleted = 0
+          AND a.id = #{id}
+        <include refid="scopeFilter"/>
+    </select>
+</mapper>
