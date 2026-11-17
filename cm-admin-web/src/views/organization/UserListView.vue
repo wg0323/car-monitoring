@@ -138,8 +138,8 @@ onMounted(async () => {
       <el-alert v-if="errorText" :title="errorText" type="error" :closable="false" show-icon />
 
       <el-table v-loading="loading" :data="rows" size="small" border>
-        <el-table-column prop="username" label="登录名" width="150" />
-        <el-table-column prop="displayName" label="用户名称" width="160" />
+        <el-table-column prop="username" label="登录名" min-width="150" />
+        <el-table-column prop="displayName" label="用户名称" min-width="160" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" effect="plain">
@@ -147,8 +147,8 @@ onMounted(async () => {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="phoneNo" label="手机号" width="150" />
-        <el-table-column label="创建时间" width="180">
+        <el-table-column prop="phoneNo" label="手机号" min-width="150" />
+        <el-table-column label="创建时间" min-width="180">
           <template #default="{ row }">
             <span class="cm-mono">{{ formatTime(row.createTime) }}</span>
           </template>
