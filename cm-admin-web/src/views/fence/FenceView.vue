@@ -1,20 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import {
-  Aim,
-  Crop,
   Delete,
   Edit,
-  Location,
-  Odometer,
-  Plus,
-  Pointer,
   Refresh,
-  RefreshLeft,
   Search,
-  Share,
-  ZoomIn,
-  ZoomOut,
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ApiError } from '@/api/request';
@@ -502,17 +492,19 @@ onBeforeUnmount(() => {
         <div class="cm-fence-table">
           <el-table v-loading="loading" :data="rows" size="small" border row-key="id" highlight-current-row
             :current-row-key="selectedId ?? undefined" @row-click="handleRowClick">
-            <el-table-column prop="name" label="区域名称" min-width="120" />
-            <el-table-column label="类型/大小" width="110">
+            <el-table-column prop="name" label="区域名称" min-width="110" show-overflow-tooltip />
+            <el-table-column label="类型/大小" min-width="130">
               <template #default="{ row }">
-                <el-tag effect="plain" size="small">{{ areaTypeText(row.areaType) }}</el-tag>
-                <span class="cm-fence-hint cm-fence-inline">
-                  {{ geometryText(row.areaType === 'circle' ? 1 : row.points.split(';').length, row.radius) }}
-                </span>
+                <div class="cm-fence-type">
+                  <el-tag effect="plain" size="small">{{ areaTypeText(row.areaType) }}</el-tag>
+                  <span class="cm-fence-hint">
+                    {{ geometryText(row.areaType === 'circle' ? 1 : row.points.split(';').length, row.radius) }}
+                  </span>
+                </div>
               </template>
             </el-table-column>
-            <el-table-column prop="departmentName" label="部门" min-width="90" />
-            <el-table-column label="报警" min-width="120">
+            <el-table-column prop="departmentName" label="部门" min-width="138" show-overflow-tooltip />
+            <el-table-column label="报警" min-width="140">
               <template #default="{ row }">
                 <span class="cm-fence-alarm">{{ alarmSummary(row) }}</span>
               </template>
@@ -526,15 +518,17 @@ onBeforeUnmount(() => {
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="110">
+            <el-table-column label="操作" width="168" fixed="right">
               <template #default="{ row }">
-                <el-button v-permission="'fence:update'" :icon="Edit" text size="small" @click.stop="openEdit(row)">
-                  编辑
-                </el-button>
-                <el-button v-permission="'fence:delete'" :icon="Delete" text size="small" type="danger"
-                  @click.stop="handleDelete(row)">
-                  删除
-                </el-button>
+                <div class="cm-fence-actions">
+                  <el-button v-permission="'fence:update'" :icon="Edit" text size="small" @click.stop="openEdit(row)">
+                    编辑
+                  </el-button>
+                  <el-button v-permission="'fence:delete'" :icon="Delete" text size="small" type="danger"
+                    @click.stop="handleDelete(row)">
+                    删除
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -546,30 +540,28 @@ onBeforeUnmount(() => {
 
         <div class="cm-fence-map">
           <div class="cm-fence-tools">
-            <el-button :type="activeTool === 'drag' ? 'primary' : 'default'" :icon="Pointer" size="small"
-              @click="enableDrag">
+            <el-button :type="activeTool === 'drag' ? 'primary' : 'default'" size="small" @click="enableDrag">
               拖动
             </el-button>
-            <el-button :icon="ZoomIn" size="small" @click="adapter?.zoomIn()">放大</el-button>
-            <el-button :icon="ZoomOut" size="small" @click="adapter?.zoomOut()">缩小</el-button>
-            <el-button :type="activeTool === 'measure' ? 'primary' : 'default'" :icon="Odometer" size="small"
-              @click="startMeasure">
+            <el-button size="small" @click="adapter?.zoomIn()">放大</el-button>
+            <el-button size="small" @click="adapter?.zoomOut()">缩小</el-button>
+            <el-button :type="activeTool === 'measure' ? 'primary' : 'default'" size="small" @click="startMeasure">
               测距
             </el-button>
-            <el-button v-permission="'fence:create'" :type="activeTool === 'circle' ? 'primary' : 'default'"
-              :icon="Aim" size="small" @click="startDraw('circle')">
+            <el-button v-permission="'fence:create'" :type="activeTool === 'circle' ? 'primary' : 'default'" size="small"
+              @click="startDraw('circle')">
               圆形
             </el-button>
-            <el-button v-permission="'fence:create'" :type="activeTool === 'rect' ? 'primary' : 'default'"
-              :icon="Crop" size="small" @click="startDraw('rect')">
+            <el-button v-permission="'fence:create'" :type="activeTool === 'rect' ? 'primary' : 'default'" size="small"
+              @click="startDraw('rect')">
               矩形
             </el-button>
-            <el-button v-permission="'fence:create'" :type="activeTool === 'polygon' ? 'primary' : 'default'"
-              :icon="Share" size="small" @click="startDraw('polygon')">
+            <el-button v-permission="'fence:create'" :type="activeTool === 'polygon' ? 'primary' : 'default'" size="small"
+              @click="startDraw('polygon')">
               多边形
             </el-button>
-            <el-button :icon="Location" size="small" @click="handleSetCenter">设为默认中心</el-button>
-            <el-button :icon="RefreshLeft" size="small" @click="handleBackToCenter">回到默认中心</el-button>
+            <el-button size="small" @click="handleSetCenter">设为默认中心</el-button>
+            <el-button size="small" @click="handleBackToCenter">回到默认中心</el-button>
           </div>
           <el-alert v-if="mapHint" :title="mapHint" :type="mapConfig?.configured ? 'error' : 'warning'"
             :closable="false" show-icon />
@@ -674,14 +666,14 @@ onBeforeUnmount(() => {
 .cm-fence-table {
   display: flex;
   flex-direction: column;
-  flex: 3;
+  flex: 1;
   min-width: 0;
 }
 
 .cm-fence-map {
   display: flex;
   flex-direction: column;
-  flex: 0 0 500px;
+  flex: 1;
   gap: var(--cm-space-1);
   min-width: 0;
 }
@@ -690,6 +682,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--cm-space-1);
+}
+
+/* el-button 自带 margin-left，与 flex gap 叠会后会把工具条与操作列挤到换行。 */
+.cm-fence-tools :deep(.el-button + .el-button),
+.cm-fence-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .cm-fence-map-canvas {
@@ -703,6 +701,14 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--cm-space-3);
+}
+
+.cm-fence-type,
+.cm-fence-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-space-1);
+  white-space: nowrap;
 }
 
 .cm-fence-alarm {
