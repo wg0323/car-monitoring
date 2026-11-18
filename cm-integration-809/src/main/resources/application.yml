@@ -121,8 +121,3 @@ cm:
       max-pending: 200000
       prune-batch: 1000
       max-attempt: 5
-
-logging:
-  level:
-    root: INFO
-    com.cm: INFO

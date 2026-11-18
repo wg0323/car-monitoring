@@ -156,8 +156,3 @@ info:
     name: cm-gateway-808
     stage: P3
     description: JT808 TCP 监听、指令下行写入与终端应答转发
-
-logging:
-  level:
-    root: INFO
-    com.cm: INFO

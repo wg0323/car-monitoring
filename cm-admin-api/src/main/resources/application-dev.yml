@@ -2,10 +2,5 @@ spring:
   rabbitmq:
     # 与 deploy/init-rabbitmq.sh 的 cm_app 账号一致。
     password: CmApp@2026
-logging:
-  level:
-    com.cm: DEBUG
-    # Outbox relay 每 500ms 轮询一次，Mapper 层 DEBUG 会把空闲期刷成 SQL 日志。
-    com.cm.infrastructure.persistence.mapper: INFO
 knife4j:
   production: false

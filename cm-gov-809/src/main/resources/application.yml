@@ -96,8 +96,3 @@ cm:
       sub-link-connect-timeout-millis: 5000
       sub-link-idle-timeout-seconds: 25
       zone: Asia/Shanghai
-
-logging:
-  level:
-    root: INFO
-    com.cm: INFO

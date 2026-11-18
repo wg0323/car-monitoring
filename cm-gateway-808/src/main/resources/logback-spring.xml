@@ -23,8 +23,29 @@
         </encoder>
     </appender>
 
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
-    </root>
+    <!-- 级别统一由本文件维护；application*.yml 不再配置 logging.level，否则会反向覆盖这里。 -->
+    <springProfile name="dev | test">
+        <logger name="com.cm" level="INFO"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="prod">
+        <logger name="com.cm" level="INFO"/>
+        <root level="WARN">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- 没有显式 Profile 时的兜底，保持与 dev 一致。 -->
+    <springProfile name="!dev &amp; !test &amp; !prod">
+        <logger name="com.cm" level="INFO"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
 </configuration>

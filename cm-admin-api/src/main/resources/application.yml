@@ -125,8 +125,3 @@ info:
     name: cm-admin-api
     stage: P4
     description: 登录会话、菜单与按钮权限、部门数据范围与车辆列表已接入；其余功能域按 feature-mapping 逐步迁移
-
-logging:
-  level:
-    root: INFO
-    com.cm: INFO
