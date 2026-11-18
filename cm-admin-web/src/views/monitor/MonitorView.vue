@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { Expand, Fold, Search } from '@element-plus/icons-vue';
+import type { TableInstance } from 'element-plus';
 import { ApiError } from '@/api/request';
 import { fetchDepartments, type DepartmentOption } from '@/api/vehicle';
 import {
@@ -36,8 +37,11 @@ const summaryError = ref('');
 const selectedIds = ref<string[]>([]);
 const mapCollapsed = ref(false);
 const mapContainer = ref<HTMLElement | null>(null);
+const tableRef = ref<TableInstance>();
 const mapConfig = ref<MonitorMapConfig | null>(null);
 const mapError = ref('');
+/** 跟随车辆：只跟第一辆勾选的车，多选时不会每来一帧就跳一次。 */
+const following = ref(false);
 
 let adapter: MapAdapter | null = null;
 let summaryTimer: number | null = null;
@@ -163,6 +167,9 @@ function applyPositionFrame(frame: PositionFrame): void {
   row.deviceTime = frame.deviceTime;
   row.online = frame.online;
   refreshMap();
+  if (following.value && selectedIds.value[0] === frame.vehicleId) {
+    adapter?.centerOnVehicle(frame.vehicleId);
+  }
 }
 
 function handleSelectionChange(selection: MonitorVehicleRow[]): void {
@@ -172,9 +179,34 @@ function handleSelectionChange(selection: MonitorVehicleRow[]): void {
   selectedIds.value = next;
   if (added.length > 0) {
     subscribeVehicles(added);
+    // 勾选即跟随：勾上就是为了盯住这辆车，省得再点一次开关；要看全图时手动停止即可。
+    following.value = true;
+    adapter?.centerOnVehicle(next[0]);
   }
   if (removed.length > 0) {
     unsubscribeVehicles(removed);
+  }
+  if (selectedIds.value.length === 0) {
+    following.value = false;
+  }
+}
+
+/** 点复选框以外的任意单元格都切换勾选：勾选是订阅推送的唯一入口，少一次瞄准。 */
+function handleRowClick(row: MonitorVehicleRow, _column: unknown, event: Event): void {
+  if ((event.target as HTMLElement | null)?.closest('.el-checkbox')) {
+    return;
+  }
+  tableRef.value?.toggleRowSelection(row);
+}
+
+/** 手动切换跟随；开启时先居中一次，不用等下一帧。 */
+function toggleFollow(): void {
+  if (selectedIds.value.length === 0) {
+    return;
+  }
+  following.value = !following.value;
+  if (following.value) {
+    adapter?.centerOnVehicle(selectedIds.value[0]);
   }
 }
 
@@ -222,8 +254,25 @@ function toggleMap(): void {
   });
 }
 
+/**
+ * 定位时间来自 808 上报，跨进程统一存 ISO-8601：带时区标识（Z 或 +08:00）的是 UTC，
+ * 必须转成本地时区再显示，否则 18:12 的点会显示成 10:12，看着像八小时没刷新。
+ * 不带时区的是后端已格式化的本地时间，直接截断，避免二次偏移。
+ */
 function formatTime(value: string | null): string {
-  return value ? value.replace('T', ' ').slice(0, 19) : '—';
+  if (!value) {
+    return '—';
+  }
+  if (!/(Z|[+-]\d{2}:?\d{2})$/.test(value)) {
+    return value.replace('T', ' ').slice(0, 19);
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value.replace('T', ' ').slice(0, 19);
+  }
+  const pad = (part: number): string => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+    + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function formatSpeed(value: number | null): string {
@@ -334,6 +383,11 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
+        <el-button size="small" :type="following ? 'primary' : 'default'"
+          :disabled="selectedIds.length === 0" @click="toggleFollow">
+          {{ following ? '停止跟随' : '跟随车辆' }}
+        </el-button>
+
         <el-button :icon="mapCollapsed ? Expand : Fold" text @click="toggleMap">
           {{ mapCollapsed ? '展开地图' : '收起地图' }}
         </el-button>
@@ -346,7 +400,8 @@ onBeforeUnmount(() => {
 
       <div class="cm-monitor-body" :class="{ 'cm-monitor-body--collapsed': mapCollapsed }">
         <div class="cm-monitor-table">
-          <el-table v-loading="loading" :data="rows" size="small" border row-key="id" @selection-change="handleSelectionChange">
+          <el-table ref="tableRef" v-loading="loading" :data="rows" size="small" border row-key="id"
+            @selection-change="handleSelectionChange" @row-click="handleRowClick">
             <el-table-column type="selection" width="44" />
             <el-table-column prop="plateNo" label="车牌号" width="120">
               <template #default="{ row }">
@@ -440,6 +495,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   flex: 3;
   min-width: 0;
+
+  :deep(.el-table__row) {
+    cursor: pointer;
+  }
 }
 
 .cm-monitor-map {

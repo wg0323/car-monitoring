@@ -39,6 +39,7 @@ interface AmapPolyline {
 interface AmapMap {
   add(overlays: unknown): void;
   remove(overlays: unknown): void;
+  setCenter(center: unknown): void;
   setZoomAndCenter(zoom: number, center: unknown): void;
   setFitView(overlays?: unknown, immediately?: boolean, avoid?: number[]): void;
   resize(): void;
@@ -120,7 +121,8 @@ export function createAmapAdapter(
     resizeEnable: true,
     viewMode: '2D',
   });
-  const markers = new Map<string, { marker: AmapMarker; vehicle: MapVehicle }>();
+  /** position 是转成 GCJ-02 后的落点，跟随视野时直接复用，不再重复调坐标转换。 */
+  const markers = new Map<string, { marker: AmapMarker; vehicle: MapVehicle; position: number[] }>();
 
   /** 报警定位点：同一时刻只保留一个，重新定位时改坐标而不是叠加车标。 */
   let focusMarker: AmapMarker | null = null;
@@ -185,6 +187,7 @@ export function createAmapAdapter(
             existing.marker.setPosition(position);
             existing.marker.setContent(markerContent(vehicle));
             existing.marker.setTitle(vehicle.plateNo);
+            existing.position = position;
             return;
           }
           const marker = new amap.Marker({
@@ -194,7 +197,7 @@ export function createAmapAdapter(
             anchor: 'center',
             zIndex: vehicle.online ? 120 : 100,
           });
-          markers.set(vehicle.id, { marker, vehicle });
+          markers.set(vehicle.id, { marker, vehicle, position });
           added.push(marker);
         });
         if (added.length > 0) {
@@ -206,6 +209,15 @@ export function createAmapAdapter(
           }
         }
       });
+    },
+
+    centerOnVehicle(vehicleId) {
+      const entry = markers.get(vehicleId);
+      if (!entry) {
+        return false;
+      }
+      map.setCenter(entry.position);
+      return true;
     },
 
     fitVehicles(vehicles) {

@@ -27,6 +27,12 @@ export interface MapAdapter {
   fitVehicles(vehicles: MapVehicle[]): void;
 
   /**
+   * 把视野中心移到指定车辆并保持当前缩放，用于实时跟随。
+   * 车标还没落地（异步坐标转换未完成）时返回 false，调用方不需要重试。
+   */
+  centerOnVehicle(vehicleId: string): boolean;
+
+  /**
    * 定位到指定坐标（WGS-84 度）并打一个临时高亮点，用于报警弹窗的地图定位。
    * 坐标转换在适配层内完成，页面只传平台口径的经纬度。
    */
