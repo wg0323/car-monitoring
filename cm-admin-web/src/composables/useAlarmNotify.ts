@@ -3,8 +3,8 @@ import { fetchAlarmNotifications, type AlarmNotifyRow } from '@/api/alarm';
 
 const POLL_INTERVAL_MS = 5000;
 
-/** 旧系统报警弹窗最多累计 20 条，超出后清空避免占用内存。 */
-const MAX_NOTICES = 20;
+/** 弹窗最多累计 10 条：再多就把右侧地图挡完了，超出丢弃最旧的。 */
+const MAX_NOTICES = 10;
 
 export interface AlarmNotice extends AlarmNotifyRow {
   /** 弹窗按「时:分:秒」显示，与旧系统 13:20:43 [车牌] 类型 的口径一致。 */

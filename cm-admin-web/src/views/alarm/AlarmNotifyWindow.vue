@@ -46,8 +46,10 @@ const emit = defineEmits<{ focus: [notice: AlarmNotice]; dismiss: [] }>();
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  width: 340px;
-  max-height: 260px;
+  width: 440px;
+  /* 高度随内容撑开，不出现滚动条；屏幕实在不够时裁掉最旧的几条（最新在最上面）。 */
+  max-height: calc(100vh - 120px);
+  overflow: hidden;
   border: 1px solid var(--cm-color-border);
   border-radius: var(--cm-radius);
   background: var(--cm-color-card);
@@ -74,7 +76,7 @@ const emit = defineEmits<{ focus: [notice: AlarmNotice]; dismiss: [] }>();
   flex: 1;
   margin: 0;
   padding: var(--cm-space-1) var(--cm-space-2);
-  overflow-y: auto;
+  overflow: hidden;
   list-style: none;
 }
 
