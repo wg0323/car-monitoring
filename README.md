@@ -182,7 +182,7 @@ npm run dev
 | 配置项 | 说明 | 默认值 |
 | --- | --- | --- |
 | `CM_DB_URL` | MySQL JDBC URL | `jdbc:mysql://127.0.0.1:3306/car_monitoring?...` |
-| `CM_DB_USERNAME` / `CM_DB_PASSWORD` | 新库账号；脚本注入本地开发口令，生产由环境变量注入 | `cm_app` / 空 |
+| `CM_DB_USERNAME` / `CM_DB_PASSWORD` | 新库账号；dev Profile 在 `application-dev.yml` 内置本地口令，生产由环境变量注入 | `cm_app` / `CmApp@2026` |
 | `CM_REDIS_HOST` / `CM_REDIS_PORT` / `CM_REDIS_DATABASE` | Redis 连接 | `127.0.0.1` / `6379` / `0` |
 | `CM_MQ_HOST` / `CM_MQ_PORT` / `CM_MQ_VHOST` | RabbitMQ 连接，vhost 由 `init-rabbitmq.sh` 创建 | `127.0.0.1` / `5672` / `cm` |
 | `CM_MONGO_URI` | 轨迹库连接，P3 接入时间序列集合 | `mongodb://127.0.0.1:27017/car_monitoring_telemetry` |
@@ -203,7 +203,7 @@ npm run dev
 
 把 `application*.yml` 放到 `car-monitoring/config/` 即可覆盖 JAR 内配置：`start-local.ps1` 已带 `--spring.config.additional-location=optional:file:./config/`。`deploy/.env.example` 是目标环境 compose 模板的变量样例，`deploy/.env` 不入库。
 
-`CM_DB_PASSWORD` 默认空，直接 `java -jar` 而不注入环境变量时连不上新库，本地请用 `start-local.ps1`。`deploy/init-mysql.sql`、`deploy/.env.example` 与 `scripts/start-local.ps1` 里的本地口令是同一个值，修改时三处必须同步。
+开发 Profile 的数据库与 RabbitMQ 口令写在各模块 `application-dev.yml`，IDE 直接启动或 `java -jar` 都不需要再注入环境变量；生产 Profile 仍走环境变量，缺凭据即启动失败。该口令与 `deploy/init-mysql.sql`、`deploy/init-rabbitmq.sh`、`deploy/.env.example` 是同一个值，修改时必须同步。
 
 ## 部署指南
 

@@ -1,3 +1,10 @@
+spring:
+  datasource:
+    # 本地开发固定口令，与 deploy/init-mysql.sql 一致。
+    password: CmApp@2026
+  rabbitmq:
+    # 与 deploy/init-rabbitmq.sh 的 cm_app 账号一致。
+    password: CmApp@2026
 logging:
   level:
     com.cm: DEBUG
