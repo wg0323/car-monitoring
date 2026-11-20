@@ -31,7 +31,8 @@ spring:
         default-requeue-rejected: false
         retry:
           enabled: true
-          max-attempts: 3
+          # Boot 4 的 max-retries 不含首次投递：2 表示首次 + 最多 2 次重试，合计最多 3 次尝试。
+          max-retries: 2
           initial-interval: 1s
           multiplier: 2
           max-interval: 10s
@@ -42,15 +43,16 @@ spring:
     scheduling:
       pool:
         size: 2
-
-server:
-  port: ${CM_GATEWAY_808_HTTP_PORT:18081}
-  shutdown: graceful
+  # Boot 4 把 Servlet 请求/响应编码从 server.servlet.encoding 迁到 spring.servlet.encoding。
   servlet:
     encoding:
       charset: UTF-8
       enabled: true
       force: true
+
+server:
+  port: ${CM_GATEWAY_808_HTTP_PORT:18081}
+  shutdown: graceful
 
 mybatis-plus:
   global-config:

@@ -24,15 +24,16 @@ spring:
     virtual-host: ${CM_MQ_VHOST:cm}
   lifecycle:
     timeout-per-shutdown-phase: 30s
-
-server:
-  port: ${CM_GOV_809_HTTP_PORT:18083}
-  shutdown: graceful
+  # Boot 4 把 Servlet 请求/响应编码从 server.servlet.encoding 迁到 spring.servlet.encoding。
   servlet:
     encoding:
       charset: UTF-8
       enabled: true
       force: true
+
+server:
+  port: ${CM_GOV_809_HTTP_PORT:18083}
+  shutdown: graceful
 
 management:
   endpoints:
