@@ -27,19 +27,22 @@ spring:
   # 数据库结构不在启动时迁移：docs/db/migration 下的版本脚本由开发或 DBA 按版本号人工执行。
   session:
     store-type: ${CM_SESSION_STORE:redis}
-    redis:
-      namespace: cm:session
+    # Boot 4 把会话 Redis 属性从 spring.session.redis 迁到 spring.session.data.redis。
+    data:
+      redis:
+        namespace: cm:session
   lifecycle:
     timeout-per-shutdown-phase: 30s
-
-server:
-  port: ${CM_ADMIN_API_PORT:8081}
-  shutdown: graceful
+  # Boot 4 把 Servlet 请求/响应编码从 server.servlet.encoding 迁到 spring.servlet.encoding。
   servlet:
     encoding:
       charset: UTF-8
       enabled: true
       force: true
+
+server:
+  port: ${CM_ADMIN_API_PORT:8081}
+  shutdown: graceful
 
 mybatis-plus:
   global-config:
